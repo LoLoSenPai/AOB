@@ -73,14 +73,6 @@ function createMap(): MapState {
     }
   }
 
-  function fillRect(x0: number, y0: number, w: number, h: number, tile: TileType): void {
-    for (let y = y0; y < y0 + h; y += 1) {
-      for (let x = x0; x < x0 + w; x += 1) {
-        setTile(x, y, tile);
-      }
-    }
-  }
-
   function fillEllipse(cx: number, cy: number, rx: number, ry: number, tile: TileType): void {
     for (let y = cy - ry; y <= cy + ry; y += 1) {
       for (let x = cx - rx; x <= cx + rx; x += 1) {
@@ -93,21 +85,11 @@ function createMap(): MapState {
     }
   }
 
-  function pathRect(x0: number, y0: number, w: number, h: number): void {
-    fillRect(x0, y0, w, h, "path");
-  }
-
   fillEllipse(58, 58, 20, 15, "grass");
   fillEllipse(34, 45, 14, 10, "grass");
   fillEllipse(92, 47, 15, 11, "grass");
   fillEllipse(84, 80, 18, 11, "grass");
   fillEllipse(37, 82, 15, 10, "grass");
-
-  pathRect(38, 57, 45, 4);
-  pathRect(56, 42, 4, 42);
-  pathRect(70, 48, 27, 4);
-  pathRect(76, 78, 27, 4);
-  pathRect(32, 77, 31, 4);
 
   fillEllipse(89, 45, 14, 11, "stoneGround");
   fillEllipse(82, 80, 10, 8, "stoneGround");

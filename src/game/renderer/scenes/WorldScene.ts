@@ -39,6 +39,9 @@ const TERRAIN_FRAMES = {
   plaza: 11,
 } as const;
 
+const UNIT_SPRITE_SCALE = 1.28;
+const UNIT_SPRITE_ORIGIN_Y = 0.61;
+
 export class WorldScene extends Phaser.Scene {
   private simulation!: Simulation;
   private hud!: HudController;
@@ -393,23 +396,23 @@ export class WorldScene extends Phaser.Scene {
     const container = this.add.container(entity.position.x, entity.position.y);
     const shadow = this.add.graphics();
     shadow.fillStyle(0x000000, 0.22);
-    shadow.fillEllipse(0, -5, 16, 6);
+    shadow.fillEllipse(0, 1, 18, 7);
     container.add(shadow);
 
     const sprites: Phaser.GameObjects.Sprite[] = [];
     let animationFamily: EntityView["animationFamily"] = "human";
     if (entity.unit?.type === "goblin") {
-      const sprite = this.add.sprite(0, 0, assetKeys.goblin.idle, 0).setOrigin(0.5, 0.78);
+      const sprite = this.add.sprite(0, 0, assetKeys.goblin.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       sprites.push(sprite);
       animationFamily = "goblin";
     } else if (entity.unit?.type === "skeleton") {
-      const sprite = this.add.sprite(0, 0, assetKeys.skeleton.idle, 0).setOrigin(0.5, 0.78);
+      const sprite = this.add.sprite(0, 0, assetKeys.skeleton.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       sprites.push(sprite);
       animationFamily = "skeleton";
     } else {
-      const base = this.add.sprite(0, 0, assetKeys.human.base.idle, 0).setOrigin(0.5, 0.78);
-      const hair = this.add.sprite(0, 0, assetKeys.human.hair.idle, 0).setOrigin(0.5, 0.78);
-      const tools = this.add.sprite(0, 0, assetKeys.human.tools.idle, 0).setOrigin(0.5, 0.78);
+      const base = this.add.sprite(0, 0, assetKeys.human.base.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
+      const hair = this.add.sprite(0, 0, assetKeys.human.hair.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
+      const tools = this.add.sprite(0, 0, assetKeys.human.tools.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       if (entity.unit?.type === "soldier") {
         base.setTint(0xf4d0b5);
         hair.setTint(0xf2e2c7);
@@ -419,6 +422,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     for (const sprite of sprites) {
+      sprite.setScale(UNIT_SPRITE_SCALE);
       container.add(sprite);
     }
 
@@ -637,7 +641,7 @@ export class WorldScene extends Phaser.Scene {
     if (entity.building) {
       return;
     } else {
-      view.selection.strokeEllipse(0, -5, 22, 12);
+      view.selection.strokeEllipse(0, 0, 24, 13);
     }
   }
 
@@ -864,14 +868,8 @@ export class WorldScene extends Phaser.Scene {
     const y = tile.y * TILE_SIZE;
     const width = config.footprint.w * TILE_SIZE;
     const height = config.footprint.h * TILE_SIZE;
-    if (this.placementGraphics) {
-      drawPreparedGround(this.placementGraphics, x, y, width, height, {
-        fillAlpha: valid ? 0.58 : 0.42,
-        outlineColor: valid ? 0xaee783 : 0xe66a58,
-        outlineAlpha: valid ? 0.9 : 0.95,
-        lineWidth: 2,
-      });
-    }
+    this.placementGraphics?.lineStyle(2, valid ? 0xaee783 : 0xe66a58, 0.95);
+    this.placementGraphics?.strokeRect(x, y, width, height);
     this.updatePlacementPreviewSprite(this.placementType, tile, valid);
   }
 
@@ -1310,7 +1308,10 @@ function buildingRenderedVisualSize(entity: GameEntity): number {
 }
 
 function buildingStaticVisualSize(entity: GameEntity): number {
-  return entity.building ? buildingStaticVisualSizeForType(entity.building.type) : 48;
+  if (!entity.building) {
+    return 48;
+  }
+  return entity.building.completed ? buildingStaticVisualSizeForType(entity.building.type) : constructionVisualSizeForType(entity.building.type);
 }
 
 function buildingStaticVisualSizeForType(type: BuildingType): number {
@@ -1333,6 +1334,10 @@ function buildingStaticVisualSizeForType(type: BuildingType): number {
     default:
       return 48;
   }
+}
+
+function constructionVisualSizeForType(type: BuildingType): number {
+  return Math.round(buildingStaticVisualSizeForType(type) * 0.72);
 }
 
 function buildingVisualSize(entity: GameEntity): number {
@@ -1470,12 +1475,8 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
   const progress = entity.building.completed ? 1 : entity.building.buildProgress / Math.max(1, entity.building.buildTimeTicks);
 
   if (hasSprite) {
-    drawPreparedGround(graphics, x, y, width, height, {
-      fillAlpha: entity.building.completed ? 0.54 : 0.4,
-      outlineColor: 0x8d6b42,
-      outlineAlpha: 0.42,
-      lineWidth: 1,
-    });
+    graphics.fillStyle(0x17110c, 0.16);
+    graphics.fillEllipse(0, height * 0.43, width * 0.72, Math.max(8, height * 0.16));
     drawAgeFoundation(graphics, ownerAge, width, height);
     if (!entity.building.completed) {
       graphics.fillStyle(0xe3b85c, 0.95);
@@ -1514,39 +1515,6 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
     for (let row = 0; row < 4; row += 1) {
       graphics.lineBetween(x + 5, y + 8 + row * 11, x + width - 5, y + 8 + row * 11);
     }
-  }
-}
-
-function drawPreparedGround(
-  graphics: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  options: {
-    fillAlpha?: number;
-    outlineColor?: number;
-    outlineAlpha?: number;
-    lineWidth?: number;
-  } = {},
-): void {
-  const padX = x - 6;
-  const padY = y + 4;
-  const padWidth = width + 12;
-  const padHeight = Math.max(12, height - 2);
-
-  graphics.fillStyle(0x59442b, options.fillAlpha ?? 0.52);
-  graphics.fillRect(padX, padY, padWidth, padHeight);
-  graphics.fillStyle(0x7a5b35, (options.fillAlpha ?? 0.52) * 0.38);
-  graphics.fillRect(padX + 3, padY + 3, Math.max(1, padWidth - 6), Math.max(1, padHeight - 6));
-  graphics.lineStyle(options.lineWidth ?? 1, options.outlineColor ?? 0x8d6b42, options.outlineAlpha ?? 0.45);
-  graphics.strokeRect(padX, padY, padWidth, padHeight);
-
-  graphics.lineStyle(1, 0x2c2418, 0.12);
-  const lineCount = Math.max(2, Math.floor(padHeight / 18));
-  for (let i = 1; i <= lineCount; i += 1) {
-    const lineY = padY + i * (padHeight / (lineCount + 1));
-    graphics.lineBetween(padX + 4, lineY, padX + padWidth - 4, lineY + ((i % 2) - 0.5) * 2);
   }
 }
 
@@ -1632,6 +1600,11 @@ function hitTestEntity(entity: GameEntity, point: Vec2): boolean {
   }
   if (entity.resourceNode) {
     return Phaser.Math.Distance.Between(entity.position.x, entity.position.y, point.x, point.y) <= resourceHitRadius(entity);
+  }
+  if (entity.unit) {
+    const dx = Math.abs(point.x - entity.position.x);
+    const dy = point.y - entity.position.y;
+    return dx <= 15 && dy >= -32 && dy <= 10;
   }
   return Phaser.Math.Distance.Between(entity.position.x, entity.position.y, point.x, point.y) <= entity.radius + 8;
 }
