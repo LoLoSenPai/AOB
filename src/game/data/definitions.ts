@@ -149,7 +149,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   townCenter: {
     type: "townCenter",
     label: "Town Center",
-    footprint: { w: 5, h: 4 },
+    footprint: { w: 10, h: 8 },
     maxHealth: 700,
     cost: {},
     buildTicks: ticksFromSeconds(1),
@@ -163,7 +163,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   house: {
     type: "house",
     label: "House",
-    footprint: { w: 2, h: 2 },
+    footprint: { w: 5, h: 4 },
     maxHealth: 180,
     cost: { wood: 35 },
     buildTicks: ticksFromSeconds(12),
@@ -175,7 +175,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   barracks: {
     type: "barracks",
     label: "Barracks",
-    footprint: { w: 4, h: 3 },
+    footprint: { w: 9, h: 6 },
     maxHealth: 360,
     cost: { wood: 120, stone: 40 },
     buildTicks: ticksFromSeconds(22),
@@ -187,7 +187,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   lumberCamp: {
     type: "lumberCamp",
     label: "Wood Camp",
-    footprint: { w: 3, h: 2 },
+    footprint: { w: 7, h: 5 },
     maxHealth: 220,
     cost: { wood: 60 },
     buildTicks: ticksFromSeconds(16),
@@ -199,7 +199,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   mill: {
     type: "mill",
     label: "Mill",
-    footprint: { w: 3, h: 2 },
+    footprint: { w: 7, h: 5 },
     maxHealth: 220,
     cost: { wood: 50 },
     buildTicks: ticksFromSeconds(14),
@@ -211,7 +211,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   stoneCamp: {
     type: "stoneCamp",
     label: "Stone Camp",
-    footprint: { w: 3, h: 2 },
+    footprint: { w: 7, h: 5 },
     maxHealth: 230,
     cost: { wood: 60 },
     buildTicks: ticksFromSeconds(16),
@@ -223,7 +223,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   goldCamp: {
     type: "goldCamp",
     label: "Gold Camp",
-    footprint: { w: 3, h: 2 },
+    footprint: { w: 7, h: 5 },
     maxHealth: 230,
     cost: { wood: 70, stone: 20 },
     buildTicks: ticksFromSeconds(18),
@@ -235,7 +235,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   farm: {
     type: "farm",
     label: "Farm",
-    footprint: { w: 4, h: 4 },
+    footprint: { w: 8, h: 6 },
     maxHealth: 140,
     cost: { wood: 60 },
     buildTicks: ticksFromSeconds(10),
@@ -246,7 +246,7 @@ export const buildingConfigs: Record<BuildingType, BuildingConfig> = {
   watchTower: {
     type: "watchTower",
     label: "Watch Tower",
-    footprint: { w: 2, h: 2 },
+    footprint: { w: 5, h: 5 },
     maxHealth: 420,
     cost: { wood: 70, stone: 90 },
     buildTicks: ticksFromSeconds(24),

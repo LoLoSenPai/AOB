@@ -38,6 +38,9 @@ export function applyCommand(state: GameState, command: GameCommand): void {
     case "buildWallLine":
       applyBuildWallLine(state, command.playerId, command.start, command.end, command.builderIds);
       break;
+    case "assignBuilders":
+      applyAssignBuilders(state, command.playerId, command.buildingId, command.builderIds);
+      break;
     case "trainUnit":
       applyTrainUnit(state, command.playerId, command.buildingId, command.unitType);
       break;
@@ -165,6 +168,28 @@ function applyBuildStructure(
   const building = createBuilding(state, buildingType, playerId, tile, completed);
   state.entities[building.id] = building;
 
+  assignBuildersToConstruction(state, playerId, building, builderIds);
+
+  addMessage(state, `${labelForBuilding(buildingType, player.age)} placed.`);
+}
+
+function applyAssignBuilders(state: GameState, playerId: PlayerId, buildingId: EntityId, builderIds: EntityId[]): void {
+  const building = state.entities[buildingId];
+  if (!building?.building || building.building.completed || building.ownerId !== playerId) {
+    return;
+  }
+
+  const assignedCount = assignBuildersToConstruction(state, playerId, building, builderIds);
+  if (assignedCount > 0) {
+    addMessage(state, `${assignedCount} villager${assignedCount > 1 ? "s" : ""} assigned to build.`);
+  }
+}
+
+function assignBuildersToConstruction(state: GameState, playerId: PlayerId, building: GameEntity, builderIds: EntityId[]): number {
+  const approachTile = findNearestFreeAdjacentTile(state, building);
+  const target = approachTile ? tileCenter(approachTile) : building.position;
+  let assignedCount = 0;
+
   for (const id of builderIds) {
     const builder = state.entities[id];
     if (!builder?.worker || !builder.mobile || builder.ownerId !== playerId) {
@@ -174,12 +199,14 @@ function applyBuildStructure(
       kind: "build",
       buildingId: building.id,
     };
-    builder.mobile.target = building.position;
-    builder.mobile.path = findPath(state, builder.position, building.position);
+    delete builder.worker.carrying;
+    builder.mobile.target = target;
+    builder.mobile.path = findPath(state, builder.position, target);
     builder.visualState = "walking";
+    assignedCount += 1;
   }
 
-  addMessage(state, `${labelForBuilding(buildingType, player.age)} placed.`);
+  return assignedCount;
 }
 
 function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoord, end: TileCoord, builderIds: EntityId[]): void {

@@ -26,7 +26,7 @@ export class PreloadScene extends Phaser.Scene {
     this.loadEnemySheets();
     this.loadAobMapAssets();
     this.loadAobBuildingAssets();
-    this.loadAobBuildingAtlases();
+    this.loadAobBuildingStaticAssets();
 
     this.load.spritesheet(assetKeys.elements.tree1, "/assets/sunnyside/elements/spr_deco_tree_01_strip4.png", {
       frameWidth: 32,
@@ -163,18 +163,36 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobBuildings.wall, `${root}/wall.png`);
   }
 
-  private loadAobBuildingAtlases(): void {
-    const root = "/assets/aob-buildings/atlas-runtime";
-    const frameConfig = {
-      frameWidth: 256,
-      frameHeight: 256,
-    };
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.townCenter, `${root}/town-center-atlas.png`, frameConfig);
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.house, `${root}/house-atlas.png`, frameConfig);
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.lumberCamp, `${root}/lumber-camp-atlas.png`, frameConfig);
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.mill, `${root}/mill-atlas.png`, frameConfig);
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.stoneCamp, `${root}/stone-camp-atlas.png`, frameConfig);
-    this.load.spritesheet(assetKeys.aobBuildingAtlases.goldCamp, `${root}/gold-camp-atlas.png`, frameConfig);
+  private loadAobBuildingStaticAssets(): void {
+    const root = "/assets/aob-buildings/static-runtime";
+    this.load.image(assetKeys.aobBuildingStatic.construction, `${root}/construction.png`);
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.genesis, `${root}/town-center-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.settlement, `${root}/town-center-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.network, `${root}/town-center-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.house.genesis, `${root}/house-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.house.settlement, `${root}/house-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.house.network, `${root}/house-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.lumberCamp.genesis, `${root}/lumber-camp-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.lumberCamp.settlement, `${root}/lumber-camp-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.lumberCamp.network, `${root}/lumber-camp-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.mill.genesis, `${root}/mill-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.mill.settlement, `${root}/mill-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.mill.network, `${root}/mill-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stoneCamp.genesis, `${root}/stone-camp-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stoneCamp.settlement, `${root}/stone-camp-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stoneCamp.network, `${root}/stone-camp-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.goldCamp.genesis, `${root}/gold-camp-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.goldCamp.settlement, `${root}/gold-camp-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.goldCamp.network, `${root}/gold-camp-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.farm.genesis, `${root}/farm-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.farm.settlement, `${root}/farm-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.farm.network, `${root}/farm-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.barracks.genesis, `${root}/barracks-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.barracks.settlement, `${root}/barracks-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.barracks.network, `${root}/barracks-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.watchTower.genesis, `${root}/watch-tower-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.watchTower.settlement, `${root}/watch-tower-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.watchTower.network, `${root}/watch-tower-t3.png`);
   }
 }
 

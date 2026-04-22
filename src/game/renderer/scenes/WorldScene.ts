@@ -7,7 +7,7 @@ import { Simulation } from "../../core/simulation/Simulation";
 import type { MapState, TileCoord, TileType, Vec2 } from "../../core/state/types";
 import { worldToTile } from "../../core/systems/mapQueries";
 import { canPlaceBuildingAt, canPlaceWallLineAt, wallLineTiles } from "../../core/systems/simulationSystems";
-import { buildingIdleAnimationKey, registerAnimations } from "../world/AnimationRegistry";
+import { registerAnimations } from "../world/AnimationRegistry";
 import { HudController } from "../ui/HudController";
 
 type EntityView = {
@@ -18,8 +18,8 @@ type EntityView = {
   health: Phaser.GameObjects.Graphics;
   animationFamily?: "human" | "goblin" | "skeleton";
   lastAnimation?: string;
-  lastBuildingAnimation?: string;
-  buildingAtlasType?: BuildingType;
+  lastBuildingTexture?: string;
+  staticBuildingType?: BuildingType;
   facingX?: -1 | 1;
 };
 
@@ -47,6 +47,7 @@ export class WorldScene extends Phaser.Scene {
   private dragStartScreen?: Vec2;
   private dragGraphics?: Phaser.GameObjects.Graphics;
   private placementGraphics?: Phaser.GameObjects.Graphics;
+  private placementPreviewSprite?: Phaser.GameObjects.Sprite;
   private placementType?: BuildingType;
   private wallLineStartTile?: TileCoord;
   private buildMenuOpen = false;
@@ -252,6 +253,7 @@ export class WorldScene extends Phaser.Scene {
     this.placementType = undefined;
     this.wallLineStartTile = undefined;
     this.placementGraphics?.clear();
+    this.hidePlacementPreviewSprite();
   }
 
   private playUiClick(frequency = 620, volume = 0.018): void {
@@ -468,16 +470,17 @@ export class WorldScene extends Phaser.Scene {
     container.add(graphics);
     const sprites: Phaser.GameObjects.Sprite[] = [];
 
-    const atlasKey = buildingAtlasAssetKey(entity);
-    let buildingAtlasType: BuildingType | undefined;
-    if (atlasKey) {
-      const sprite = this.add.sprite(0, buildingSpriteBaselineY(entity), atlasKey, 0).setOrigin(0.5, 1);
-      setMaxDisplaySize(sprite, buildingAtlasVisualSize(entity));
+    const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age : undefined;
+    const staticKey = buildingStaticAssetKey(entity, ownerAge ?? "genesis");
+    const buildingKey = buildingAssetKey(entity);
+    let staticBuildingType: BuildingType | undefined;
+    if (staticKey) {
+      const sprite = this.add.sprite(0, buildingSpriteBaselineY(entity), staticKey).setOrigin(0.5, 1);
+      setMaxDisplaySize(sprite, buildingStaticVisualSize(entity));
       sprites.push(sprite);
       container.add(sprite);
-      buildingAtlasType = entity.building?.type;
-    } else if (buildingAssetKey(entity)) {
-      const buildingKey = buildingAssetKey(entity);
+      staticBuildingType = entity.building?.type;
+    } else if (buildingKey) {
       const sprite = this.add.sprite(0, buildingSpriteBaselineY(entity), buildingKey).setOrigin(0.5, 1);
       setMaxDisplaySize(sprite, buildingVisualSize(entity));
       sprites.push(sprite);
@@ -496,7 +499,7 @@ export class WorldScene extends Phaser.Scene {
     const health = this.add.graphics();
     container.add(selection);
     container.add(health);
-    return { container, sprites, graphics, selection, health, buildingAtlasType };
+    return { container, sprites, graphics, selection, health, staticBuildingType, lastBuildingTexture: staticKey };
   }
 
   private updateEntityView(entity: GameEntity, view: EntityView): void {
@@ -551,8 +554,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updateBuildingSprites(entity: GameEntity, view: EntityView, ownerAge: AgeId | undefined): void {
-    if (view.buildingAtlasType && entity.building) {
-      this.updateAtlasBuildingSprite(entity, view, ownerAge ?? "genesis");
+    if (view.staticBuildingType && entity.building) {
+      this.updateStaticBuildingSprite(entity, view, ownerAge ?? "genesis");
       return;
     }
 
@@ -577,33 +580,30 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private updateAtlasBuildingSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
+  private updateStaticBuildingSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
     const sprite = view.sprites[0];
-    if (!sprite || !entity.building || !view.buildingAtlasType) {
+    if (!sprite || !entity.building || !view.staticBuildingType) {
       return;
+    }
+
+    const textureKey = buildingStaticAssetKey(entity, ownerAge);
+    if (!textureKey) {
+      return;
+    }
+    if (view.lastBuildingTexture !== textureKey) {
+      sprite.setTexture(textureKey);
+      view.lastBuildingTexture = textureKey;
     }
 
     sprite.clearTint();
-    sprite.setAlpha(1);
+    sprite.setAlpha(entity.building.completed ? 1 : 0.92);
     sprite.setOrigin(0.5, 1);
     sprite.setY(buildingSpriteBaselineY(entity));
-    setMaxDisplaySize(sprite, buildingAtlasVisualSize(entity));
+    setMaxDisplaySize(sprite, buildingStaticVisualSize(entity));
 
-    if (!entity.building.completed) {
-      const frame = entity.health && entity.health.current <= 0 ? BUILDING_ATLAS_DESTROYED_FRAME : BUILDING_ATLAS_CONSTRUCTION_FRAME;
-      if (view.lastBuildingAnimation) {
-        sprite.stop();
-        view.lastBuildingAnimation = undefined;
-      }
-      sprite.setFrame(frame);
-      sprite.setAlpha(0.9);
-      return;
-    }
-
-    const animationKey = buildingIdleAnimationKey(view.buildingAtlasType, ownerAge);
-    if (view.lastBuildingAnimation !== animationKey) {
-      view.lastBuildingAnimation = animationKey;
-      sprite.play(animationKey, true);
+    if (entity.farm?.depleted) {
+      sprite.setTint(0x8d8276);
+      sprite.setAlpha(0.78);
     }
   }
 
@@ -738,6 +738,20 @@ export class WorldScene extends Phaser.Scene {
     if (selectedUnits.length === 0) {
       return;
     }
+    if (target.ownerId === PLAYER_ID && target.building && !target.building.completed) {
+      const workerIds = this.selectedWorkerIds();
+      if (workerIds.length === 0) {
+        return;
+      }
+      this.simulation.dispatch({
+        type: "assignBuilders",
+        playerId: PLAYER_ID,
+        buildingId: target.id,
+        builderIds: workerIds,
+      });
+      this.showCommandIndicator(target.position, "build");
+      return;
+    }
     if (isGatherableEntity(target)) {
       const workerIds = this.selectedWorkerIds();
       if (workerIds.length === 0) {
@@ -834,11 +848,13 @@ export class WorldScene extends Phaser.Scene {
   private updatePlacementPreview(): void {
     this.placementGraphics?.clear();
     if (!this.placementType) {
+      this.hidePlacementPreviewSprite();
       return;
     }
     const pointer = this.input.activePointer;
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
     if (this.placementType === "wall") {
+      this.hidePlacementPreviewSprite();
       this.updateWallPlacementPreview(tile);
       return;
     }
@@ -848,10 +864,45 @@ export class WorldScene extends Phaser.Scene {
     const y = tile.y * TILE_SIZE;
     const width = config.footprint.w * TILE_SIZE;
     const height = config.footprint.h * TILE_SIZE;
-    this.placementGraphics?.fillStyle(valid ? 0x6ee75a : 0xdd5143, 0.28);
-    this.placementGraphics?.fillRect(x, y, width, height);
-    this.placementGraphics?.lineStyle(2, valid ? 0x9cff70 : 0xff7d68, 0.9);
-    this.placementGraphics?.strokeRect(x, y, width, height);
+    if (this.placementGraphics) {
+      drawPreparedGround(this.placementGraphics, x, y, width, height, {
+        fillAlpha: valid ? 0.58 : 0.42,
+        outlineColor: valid ? 0xaee783 : 0xe66a58,
+        outlineAlpha: valid ? 0.9 : 0.95,
+        lineWidth: 2,
+      });
+    }
+    this.updatePlacementPreviewSprite(this.placementType, tile, valid);
+  }
+
+  private updatePlacementPreviewSprite(type: BuildingType, tile: TileCoord, valid: boolean): void {
+    const textureKey = buildingStaticAssetKeyForType(type, true, this.simulation.state.players[PLAYER_ID].age);
+    if (!textureKey) {
+      this.hidePlacementPreviewSprite();
+      return;
+    }
+
+    const config = buildingConfigs[type];
+    const x = (tile.x + config.footprint.w / 2) * TILE_SIZE;
+    const y = (tile.y + config.footprint.h) * TILE_SIZE + 2;
+    if (!this.placementPreviewSprite) {
+      this.placementPreviewSprite = this.add.sprite(x, y, textureKey).setOrigin(0.5, 1).setDepth(10_000);
+    } else if (this.placementPreviewSprite.texture.key !== textureKey) {
+      this.placementPreviewSprite.setTexture(textureKey);
+    }
+
+    this.placementPreviewSprite.setVisible(true);
+    this.placementPreviewSprite.setPosition(x, y);
+    this.placementPreviewSprite.setAlpha(valid ? 0.58 : 0.42);
+    this.placementPreviewSprite.clearTint();
+    if (!valid) {
+      this.placementPreviewSprite.setTint(0xff9b8a);
+    }
+    setMaxDisplaySize(this.placementPreviewSprite, buildingStaticVisualSizeForType(type));
+  }
+
+  private hidePlacementPreviewSprite(): void {
+    this.placementPreviewSprite?.setVisible(false);
   }
 
   private updateWallPlacementPreview(hoverTile: TileCoord): void {
@@ -938,6 +989,10 @@ export class WorldScene extends Phaser.Scene {
     const hover = this.getEntityAt({ x: pointer.worldX, y: pointer.worldY });
     if (hover?.ownerId && hover.ownerId !== PLAYER_ID) {
       this.setCursor(cursorUrl("sword.png", 7, 7, "crosshair"));
+      return;
+    }
+    if (hover?.ownerId === PLAYER_ID && hover.building && !hover.building.completed && this.selectedWorkerIds().length > 0) {
+      this.setCursor(cursorUrl("hammer.png", 6, 6, "pointer"));
       return;
     }
     if (hover && isGatherableEntity(hover) && this.selectedWorkerIds().length > 0) {
@@ -1187,7 +1242,11 @@ function isGatherableEntity(entity: GameEntity): boolean {
 }
 
 function buildingAssetKey(entity: GameEntity): string | undefined {
-  switch (entity.building?.type) {
+  return entity.building ? buildingAssetKeyForType(entity.building.type) : undefined;
+}
+
+function buildingAssetKeyForType(type: BuildingType): string | undefined {
+  switch (type) {
     case "townCenter":
       return assetKeys.aobBuildings.townCenter;
     case "house":
@@ -1210,6 +1269,69 @@ function buildingAssetKey(entity: GameEntity): string | undefined {
       return undefined;
     default:
       return undefined;
+  }
+}
+
+function buildingStaticAssetKey(entity: GameEntity, ownerAge: AgeId): string | undefined {
+  if (!entity.building) {
+    return undefined;
+  }
+
+  return buildingStaticAssetKeyForType(entity.building.type, entity.building.completed, ownerAge);
+}
+
+function buildingStaticAssetKeyForType(type: BuildingType, completed: boolean, ownerAge: AgeId): string | undefined {
+  switch (type) {
+    case "townCenter":
+      return completed ? assetKeys.aobBuildingStatic.townCenter[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "house":
+      return completed ? assetKeys.aobBuildingStatic.house[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "lumberCamp":
+      return completed ? assetKeys.aobBuildingStatic.lumberCamp[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "mill":
+      return completed ? assetKeys.aobBuildingStatic.mill[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "stoneCamp":
+      return completed ? assetKeys.aobBuildingStatic.stoneCamp[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "goldCamp":
+      return completed ? assetKeys.aobBuildingStatic.goldCamp[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "farm":
+      return completed ? assetKeys.aobBuildingStatic.farm[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "barracks":
+      return completed ? assetKeys.aobBuildingStatic.barracks[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "watchTower":
+      return completed ? assetKeys.aobBuildingStatic.watchTower[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    default:
+      return undefined;
+  }
+}
+
+function buildingRenderedVisualSize(entity: GameEntity): number {
+  return buildingStaticAssetKey(entity, "genesis") ? buildingStaticVisualSize(entity) : buildingVisualSize(entity);
+}
+
+function buildingStaticVisualSize(entity: GameEntity): number {
+  return entity.building ? buildingStaticVisualSizeForType(entity.building.type) : 48;
+}
+
+function buildingStaticVisualSizeForType(type: BuildingType): number {
+  switch (type) {
+    case "townCenter":
+      return 300;
+    case "house":
+      return 180;
+    case "lumberCamp":
+    case "mill":
+    case "stoneCamp":
+    case "goldCamp":
+      return 210;
+    case "farm":
+      return 210;
+    case "barracks":
+      return 235;
+    case "watchTower":
+      return 235;
+    default:
+      return 48;
   }
 }
 
@@ -1248,7 +1370,7 @@ function buildingHealthBarY(entity: GameEntity): number {
   if (!entity.building) {
     return -39;
   }
-  return buildingSpriteBaselineY(entity) - buildingVisualSize(entity) - 8;
+  return buildingSpriteBaselineY(entity) - buildingRenderedVisualSize(entity) - 8;
 }
 
 function mouseButton(pointer: Phaser.Input.Pointer): number {
@@ -1348,8 +1470,12 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
   const progress = entity.building.completed ? 1 : entity.building.buildProgress / Math.max(1, entity.building.buildTimeTicks);
 
   if (hasSprite) {
-    graphics.fillStyle(0x17110c, 0.18);
-    graphics.fillEllipse(0, height * 0.42, width * 0.92, Math.max(8, height * 0.22));
+    drawPreparedGround(graphics, x, y, width, height, {
+      fillAlpha: entity.building.completed ? 0.54 : 0.4,
+      outlineColor: 0x8d6b42,
+      outlineAlpha: 0.42,
+      lineWidth: 1,
+    });
     drawAgeFoundation(graphics, ownerAge, width, height);
     if (!entity.building.completed) {
       graphics.fillStyle(0xe3b85c, 0.95);
@@ -1388,6 +1514,39 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
     for (let row = 0; row < 4; row += 1) {
       graphics.lineBetween(x + 5, y + 8 + row * 11, x + width - 5, y + 8 + row * 11);
     }
+  }
+}
+
+function drawPreparedGround(
+  graphics: Phaser.GameObjects.Graphics,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  options: {
+    fillAlpha?: number;
+    outlineColor?: number;
+    outlineAlpha?: number;
+    lineWidth?: number;
+  } = {},
+): void {
+  const padX = x - 6;
+  const padY = y + 4;
+  const padWidth = width + 12;
+  const padHeight = Math.max(12, height - 2);
+
+  graphics.fillStyle(0x59442b, options.fillAlpha ?? 0.52);
+  graphics.fillRect(padX, padY, padWidth, padHeight);
+  graphics.fillStyle(0x7a5b35, (options.fillAlpha ?? 0.52) * 0.38);
+  graphics.fillRect(padX + 3, padY + 3, Math.max(1, padWidth - 6), Math.max(1, padHeight - 6));
+  graphics.lineStyle(options.lineWidth ?? 1, options.outlineColor ?? 0x8d6b42, options.outlineAlpha ?? 0.45);
+  graphics.strokeRect(padX, padY, padWidth, padHeight);
+
+  graphics.lineStyle(1, 0x2c2418, 0.12);
+  const lineCount = Math.max(2, Math.floor(padHeight / 18));
+  for (let i = 1; i <= lineCount; i += 1) {
+    const lineY = padY + i * (padHeight / (lineCount + 1));
+    graphics.lineBetween(padX + 4, lineY, padX + padWidth - 4, lineY + ((i % 2) - 0.5) * 2);
   }
 }
 

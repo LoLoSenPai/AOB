@@ -1,7 +1,5 @@
 import Phaser from "phaser";
 import { assetKeys, type HumanAction } from "../../data/assets";
-import type { AgeId } from "../../data/constants";
-import type { BuildingType } from "../../core/entities/types";
 
 type SheetAnimation = {
   key: string;
@@ -66,41 +64,6 @@ export function registerAnimations(scene: Phaser.Scene): void {
   create(scene, { key: "windmill-turn", textureKey: assetKeys.elements.windmill, frames: 9, frameRate: 6, repeat: -1 });
   create(scene, { key: "fire-loop", textureKey: assetKeys.elements.fire, frames: 4, frameRate: 7, repeat: -1 });
   create(scene, { key: "smoke-loop", textureKey: assetKeys.elements.smoke, frames: 30, frameRate: 10, repeat: -1 });
-  registerBuildingAnimations(scene);
-}
-
-function registerBuildingAnimations(scene: Phaser.Scene): void {
-  const ageRows: { age: AgeId; row: number }[] = [
-    { age: "genesis", row: 1 },
-    { age: "settlement", row: 2 },
-    { age: "network", row: 3 },
-  ];
-  const atlases: { type: Extract<BuildingType, "townCenter" | "house" | "lumberCamp" | "mill" | "stoneCamp" | "goldCamp">; textureKey: string; idleFrames: number }[] = [
-    { type: "townCenter", textureKey: assetKeys.aobBuildingAtlases.townCenter, idleFrames: 4 },
-    { type: "house", textureKey: assetKeys.aobBuildingAtlases.house, idleFrames: 5 },
-    { type: "lumberCamp", textureKey: assetKeys.aobBuildingAtlases.lumberCamp, idleFrames: 5 },
-    { type: "mill", textureKey: assetKeys.aobBuildingAtlases.mill, idleFrames: 5 },
-    { type: "stoneCamp", textureKey: assetKeys.aobBuildingAtlases.stoneCamp, idleFrames: 5 },
-    { type: "goldCamp", textureKey: assetKeys.aobBuildingAtlases.goldCamp, idleFrames: 5 },
-  ];
-
-  for (const atlas of atlases) {
-    for (const ageRow of ageRows) {
-      const start = ageRow.row * 5;
-      create(scene, {
-        key: buildingIdleAnimationKey(atlas.type, ageRow.age),
-        textureKey: atlas.textureKey,
-        start,
-        frames: atlas.idleFrames,
-        frameRate: atlas.type === "townCenter" ? 4 : 5,
-        repeat: -1,
-      });
-    }
-  }
-}
-
-export function buildingIdleAnimationKey(type: BuildingType, age: AgeId): string {
-  return `building-${type}-idle-${age}`;
 }
 
 function create(scene: Phaser.Scene, config: SheetAnimation): void {

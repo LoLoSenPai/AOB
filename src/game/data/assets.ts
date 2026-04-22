@@ -96,6 +96,54 @@ export const assetKeys = {
     stoneCamp: "aob-atlas-stone-camp",
     goldCamp: "aob-atlas-gold-camp",
   },
+  aobBuildingStatic: {
+    construction: "aob-building-static-construction",
+    townCenter: {
+      genesis: "aob-building-static-town-center-t1",
+      settlement: "aob-building-static-town-center-t2",
+      network: "aob-building-static-town-center-t3",
+    },
+    house: {
+      genesis: "aob-building-static-house-t1",
+      settlement: "aob-building-static-house-t2",
+      network: "aob-building-static-house-t3",
+    },
+    lumberCamp: {
+      genesis: "aob-building-static-lumber-camp-t1",
+      settlement: "aob-building-static-lumber-camp-t2",
+      network: "aob-building-static-lumber-camp-t3",
+    },
+    mill: {
+      genesis: "aob-building-static-mill-t1",
+      settlement: "aob-building-static-mill-t2",
+      network: "aob-building-static-mill-t3",
+    },
+    stoneCamp: {
+      genesis: "aob-building-static-stone-camp-t1",
+      settlement: "aob-building-static-stone-camp-t2",
+      network: "aob-building-static-stone-camp-t3",
+    },
+    goldCamp: {
+      genesis: "aob-building-static-gold-camp-t1",
+      settlement: "aob-building-static-gold-camp-t2",
+      network: "aob-building-static-gold-camp-t3",
+    },
+    farm: {
+      genesis: "aob-building-static-farm-t1",
+      settlement: "aob-building-static-farm-t2",
+      network: "aob-building-static-farm-t3",
+    },
+    barracks: {
+      genesis: "aob-building-static-barracks-t1",
+      settlement: "aob-building-static-barracks-t2",
+      network: "aob-building-static-barracks-t3",
+    },
+    watchTower: {
+      genesis: "aob-building-static-watch-tower-t1",
+      settlement: "aob-building-static-watch-tower-t2",
+      network: "aob-building-static-watch-tower-t3",
+    },
+  },
   ui: {
     indicator: "ui-indicator",
   },

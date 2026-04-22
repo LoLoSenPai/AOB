@@ -43,6 +43,12 @@ export type BuildWallLineCommand = CommandBase & {
   builderIds: EntityId[];
 };
 
+export type AssignBuildersCommand = CommandBase & {
+  type: "assignBuilders";
+  buildingId: EntityId;
+  builderIds: EntityId[];
+};
+
 export type TrainUnitCommand = CommandBase & {
   type: "trainUnit";
   buildingId: EntityId;
@@ -86,6 +92,7 @@ export type GameCommand =
   | MoveUnitsCommand
   | BuildStructureCommand
   | BuildWallLineCommand
+  | AssignBuildersCommand
   | TrainUnitCommand
   | GatherResourceCommand
   | AttackTargetCommand

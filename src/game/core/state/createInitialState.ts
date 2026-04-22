@@ -109,10 +109,6 @@ function createMap(): MapState {
   pathRect(76, 78, 27, 4);
   pathRect(32, 77, 31, 4);
 
-  fillRect(46, 64, 12, 10, "dirt");
-  fillRect(66, 61, 12, 9, "dirt");
-  fillRect(72, 42, 11, 7, "dirt");
-  fillRect(28, 68, 12, 10, "dirt");
   fillEllipse(89, 45, 14, 11, "stoneGround");
   fillEllipse(82, 80, 10, 8, "stoneGround");
   fillEllipse(103, 64, 14, 13, "crystalGround");
