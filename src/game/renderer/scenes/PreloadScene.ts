@@ -7,54 +7,11 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.spritesheet(assetKeys.tiles, "/assets/sunnyside/tiles/sunnyside_16.png", {
-      frameWidth: 16,
-      frameHeight: 16,
-      spacing: 0,
-      margin: 0,
-    });
-    this.load.spritesheet(assetKeys.forest, "/assets/sunnyside/tiles/forest_32.png", {
-      frameWidth: 32,
-      frameHeight: 32,
-    });
-    this.load.spritesheet(assetKeys.aobMap.terrain, "/assets/aob-map/optimized/terrain-tiles-128-clean.png", {
-      frameWidth: 128,
-      frameHeight: 128,
-    });
-
     this.loadHumanSheets();
     this.loadEnemySheets();
     this.loadAobMapAssets();
     this.loadAobBuildingAssets();
     this.loadAobBuildingStaticAssets();
-
-    this.load.spritesheet(assetKeys.elements.tree1, "/assets/sunnyside/elements/spr_deco_tree_01_strip4.png", {
-      frameWidth: 32,
-      frameHeight: 34,
-    });
-    this.load.spritesheet(assetKeys.elements.tree2, "/assets/sunnyside/elements/spr_deco_tree_02_strip4.png", {
-      frameWidth: 28,
-      frameHeight: 43,
-    });
-    this.load.spritesheet(assetKeys.elements.windmill, "/assets/sunnyside/elements/spr_deco_windmill_withshadow_strip9.png", {
-      frameWidth: 112,
-      frameHeight: 112,
-    });
-    this.load.spritesheet(assetKeys.elements.fire, "/assets/sunnyside/elements/spr_deco_fire_01_strip4.png", {
-      frameWidth: 5,
-      frameHeight: 10,
-    });
-    this.load.spritesheet(assetKeys.elements.smoke, "/assets/sunnyside/elements/chimneysmoke_01_strip30.png", {
-      frameWidth: 15,
-      frameHeight: 37,
-    });
-
-    this.load.image(assetKeys.elements.rock, "/assets/sunnyside/elements/rock.png");
-    this.load.image(assetKeys.elements.wood, "/assets/sunnyside/elements/wood.png");
-    this.load.image(assetKeys.elements.wheat, "/assets/sunnyside/elements/wheat_05.png");
-    this.load.image(assetKeys.elements.carrot, "/assets/sunnyside/elements/carrot_05.png");
-    this.load.image(assetKeys.elements.soil, "/assets/sunnyside/elements/soil_00.png");
-    this.load.image(assetKeys.ui.indicator, "/assets/sunnyside/ui/indicator.png");
   }
 
   create(): void {
@@ -135,18 +92,59 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private loadAobMapAssets(): void {
-    const root = "/assets/aob-map/optimized";
+    const root = "/assets/aob-map/runtime";
+    const legacyRoot = "/assets/aob-map/optimized";
+    const newMapRoot = "/new-map";
+    this.load.image(assetKeys.aobMap.baseGrass, `${newMapRoot}/base-grass.png`);
+    this.load.image(assetKeys.aobMap.baseDirt, `${newMapRoot}/base-dirt.png`);
+    this.load.image(assetKeys.aobMap.baseRocky, `${newMapRoot}/base-rocky.png`);
+    this.load.image(assetKeys.aobMap.baseShallowWater, `${newMapRoot}/base-shallow-water.png`);
+    this.load.image(assetKeys.aobMap.deepWater, `${newMapRoot}/deep-water.png`);
+    this.load.image(assetKeys.aobMap.grassDirtEdge, `${newMapRoot}/grass-to-dirt-v.png`);
+    this.load.image(assetKeys.aobMap.grassDirtCornerOuter, `${newMapRoot}/grass-dirt-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.grassDirtCornerInner, `${newMapRoot}/grass-dirt-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.grassStoneEdge, `${newMapRoot}/grass-stone-edge-vertical.png`);
+    this.load.image(assetKeys.aobMap.grassStoneCornerOuter, `${newMapRoot}/grass-stone-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.grassStoneCornerInner, `${newMapRoot}/grass-stone-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneEdge, `${newMapRoot}/dirt-stone-edge.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneCornerOuter, `${newMapRoot}/dirt-stone-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneCornerInner, `${newMapRoot}/dirt-stone-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.cliffCornerOuter, `${newMapRoot}/cliff-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.crystalGround, `${newMapRoot}/crystal-ground.png`);
     this.load.image(assetKeys.aobMap.trees, `${root}/trees.png`);
+    this.load.image(assetKeys.aobMap.treesAlt, `${root}/trees-alt.png`);
+    this.load.image(assetKeys.aobMap.pineTree, `${root}/pine-tree.png`);
     this.load.image(assetKeys.aobMap.bush, `${root}/bush.png`);
     this.load.image(assetKeys.aobMap.fruitBush, `${root}/fruit-bush.png`);
+    this.load.image(assetKeys.aobMap.flowerPatch, `${root}/flower-patch.png`);
+    this.load.image(assetKeys.aobMap.grassPatch, `${root}/grass-patch.png`);
     this.load.image(assetKeys.aobMap.bigRocks, `${root}/big-rocks.png`);
     this.load.image(assetKeys.aobMap.rocks, `${root}/rocks.png`);
     this.load.image(assetKeys.aobMap.rock, `${root}/rock.png`);
     this.load.image(assetKeys.aobMap.woodPile, `${root}/wood-pile.png`);
     this.load.image(assetKeys.aobMap.stump, `${root}/stump.png`);
-    this.load.image(assetKeys.aobMap.campfire, `${root}/campfire.png`);
     this.load.image(assetKeys.aobMap.flag, `${root}/flag.png`);
     this.load.image(assetKeys.aobMap.crystalNode, `${root}/crystal-node.png`);
+    this.load.image(assetKeys.aobMap.crystalNodeAlt, `${root}/crystal-node-alt.png`);
+    this.load.image(assetKeys.aobMap.crystalSprout, `${root}/crystal-sprout.png`);
+    this.load.image(assetKeys.aobMap.crates, `${root}/crates.png`);
+    this.load.image(assetKeys.aobMap.barrels, `${root}/barrels.png`);
+    this.load.image(assetKeys.aobMap.sacks, `${root}/sacks.png`);
+    this.load.image(assetKeys.aobMap.fence, `${root}/fence.png`);
+    this.load.image(assetKeys.aobMap.fenceCorner, `${root}/fence-corner.png`);
+    this.load.image(assetKeys.aobMap.sign, `${root}/sign.png`);
+    this.load.image(assetKeys.aobMap.torch, `${root}/torch.png`);
+    this.load.image(assetKeys.aobMap.cart, `${root}/cart.png`);
+    this.load.image(assetKeys.aobMap.well, `${root}/well.png`);
+    this.load.image(assetKeys.aobMap.anvil, `${root}/anvil.png`);
+    this.load.image(assetKeys.aobMap.logStack, `${root}/log-stack.png`);
+    this.load.image(assetKeys.aobMap.trough, `${root}/trough.png`);
+    this.load.image(assetKeys.aobMap.bench, `${root}/bench.png`);
+    this.load.image(assetKeys.aobMap.shoreEdge, `${newMapRoot}/shore-edge.png`);
+    this.load.image(assetKeys.aobMap.shoreCorner, `${newMapRoot}/shore-corner.png`);
+    this.load.image(assetKeys.aobMap.cliffEdge, `${newMapRoot}/cliff-edge.png`);
+    this.load.image(assetKeys.aobMap.crystalCliffEdge, `${newMapRoot}/crystal-cliff-edge.png`);
+    this.load.image(assetKeys.aobMap.campfire, `${legacyRoot}/campfire.png`);
   }
 
   private loadAobBuildingAssets(): void {

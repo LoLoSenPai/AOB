@@ -12,6 +12,7 @@ import { HudController } from "../ui/HudController";
 
 type EntityView = {
   container: Phaser.GameObjects.Container;
+  ground?: Phaser.GameObjects.TileSprite;
   sprites: Phaser.GameObjects.Sprite[];
   graphics?: Phaser.GameObjects.Graphics;
   selection: Phaser.GameObjects.Graphics;
@@ -23,24 +24,18 @@ type EntityView = {
   facingX?: -1 | 1;
 };
 
-const TERRAIN_CHUNK_TILES = 4;
-const TERRAIN_FRAMES = {
-  grass: 0,
-  dirt: 1,
-  path: 2,
-  stone: 3,
-  water: 4,
-  deepWater: 5,
-  rocky: 6,
-  cliff: 7,
-  crystalDirt: 8,
-  techPlaza: 9,
-  farmRows: 10,
-  plaza: 11,
-} as const;
+type CardinalSide = "north" | "east" | "south" | "west";
 
+type NeighboringTerrain = Record<CardinalSide, TileType>;
+
+const CARDINAL_SIDES: CardinalSide[] = ["north", "east", "south", "west"];
+
+const TERRAIN_CHUNK_TILES = 8;
+const TERRAIN_BASE_DEPTH = -1000;
+const TERRAIN_TRANSITION_DEPTH = -950;
 const UNIT_SPRITE_SCALE = 1.28;
 const UNIT_SPRITE_ORIGIN_Y = 0.61;
+const GROUND_PAD_DEPTH = -500;
 
 export class WorldScene extends Phaser.Scene {
   private simulation!: Simulation;
@@ -50,6 +45,7 @@ export class WorldScene extends Phaser.Scene {
   private dragStartScreen?: Vec2;
   private dragGraphics?: Phaser.GameObjects.Graphics;
   private placementGraphics?: Phaser.GameObjects.Graphics;
+  private placementPreviewGround?: Phaser.GameObjects.TileSprite;
   private placementPreviewSprite?: Phaser.GameObjects.Sprite;
   private placementType?: BuildingType;
   private wallLineStartTile?: TileCoord;
@@ -73,8 +69,8 @@ export class WorldScene extends Phaser.Scene {
     this.createHud();
 
     this.cameras.main.setBounds(0, 0, this.simulation.state.map.width * TILE_SIZE, this.simulation.state.map.height * TILE_SIZE);
-    this.cameras.main.centerOn(60 * TILE_SIZE, 60 * TILE_SIZE);
-    this.cameras.main.setZoom(1.25);
+    this.cameras.main.centerOn(62 * TILE_SIZE, 64 * TILE_SIZE);
+    this.cameras.main.setZoom(1.22);
 
     this.dragGraphics = this.add.graphics().setDepth(10_000);
     this.placementGraphics = this.add.graphics().setDepth(9_999);
@@ -102,27 +98,177 @@ export class WorldScene extends Phaser.Scene {
     const chunkSize = TERRAIN_CHUNK_TILES * TILE_SIZE;
     for (let y = 0; y < state.map.height; y += TERRAIN_CHUNK_TILES) {
       for (let x = 0; x < state.map.width; x += TERRAIN_CHUNK_TILES) {
-        const frame = terrainFrameForChunk(state.map, x, y);
+        const kind = terrainKindForChunk(state.map, x, y);
+        const textureKey = terrainTextureKeyForChunk(kind);
         const variation = hash2(x, y);
         const tile = this.add
-          .image(x * TILE_SIZE, y * TILE_SIZE, assetKeys.aobMap.terrain, frame)
+          .image(x * TILE_SIZE, y * TILE_SIZE, textureKey)
           .setOrigin(0, 0)
           .setDisplaySize(chunkSize, chunkSize)
-          .setDepth(-1000);
+          .setDepth(TERRAIN_BASE_DEPTH);
 
-        if (frame !== TERRAIN_FRAMES.techPlaza && frame !== TERRAIN_FRAMES.plaza && frame !== TERRAIN_FRAMES.rocky && frame !== TERRAIN_FRAMES.crystalDirt) {
+        if (canMirrorTerrainChunk(kind)) {
           tile.setFlipX((variation & 1) === 1);
           tile.setFlipY((variation & 2) === 2);
         }
-        if (frame === TERRAIN_FRAMES.water || frame === TERRAIN_FRAMES.deepWater) {
-          tile.setAlpha(0.95);
+        if (kind === "water") {
+          tile.setAlpha(0.96);
+        } else if (kind === "deepWater") {
+          tile.setAlpha(0.98);
+        }
+      }
+    }
+
+    this.createTerrainTransitions(state, chunkSize);
+  }
+
+  private createTerrainTransitions(state: Simulation["state"], chunkSize: number): void {
+    for (let y = 0; y < state.map.height; y += TERRAIN_CHUNK_TILES) {
+      for (let x = 0; x < state.map.width; x += TERRAIN_CHUNK_TILES) {
+        const kind = terrainKindForChunk(state.map, x, y);
+        const north = terrainKindForChunk(state.map, x, y - TERRAIN_CHUNK_TILES);
+        const east = terrainKindForChunk(state.map, x + TERRAIN_CHUNK_TILES, y);
+        const south = terrainKindForChunk(state.map, x, y + TERRAIN_CHUNK_TILES);
+        const west = terrainKindForChunk(state.map, x - TERRAIN_CHUNK_TILES, y);
+        const worldX = x * TILE_SIZE + chunkSize / 2;
+        const worldY = y * TILE_SIZE + chunkSize / 2;
+        const neighbors = { north, east, south, west };
+
+        if (isGrassLike(kind)) {
+          this.placeTransitionEdges(worldX, worldY, chunkSize, neighbors, isWaterChunk, assetKeys.aobMap.shoreEdge, "south");
+          this.placeTransitionCorner(worldX, worldY, chunkSize, neighbors, isWaterChunk, assetKeys.aobMap.shoreCorner);
+          if (isDirtLike(south)) {
+            this.add
+              .image(worldX, worldY, assetKeys.aobMap.cliffEdge)
+              .setOrigin(0.5, 0.5)
+              .setDisplaySize(chunkSize, chunkSize)
+              .setDepth(TERRAIN_TRANSITION_DEPTH);
+          }
+          for (const side of ["north", "east", "west"] as CardinalSide[]) {
+            if (!isDirtLike(neighbors[side])) {
+              continue;
+            }
+            this.add
+              .image(worldX, worldY, assetKeys.aobMap.grassDirtEdge)
+              .setOrigin(0.5, 0.5)
+              .setDisplaySize(chunkSize, chunkSize)
+              .setAngle(rotationForSide("east", side))
+              .setDepth(TERRAIN_TRANSITION_DEPTH);
+          }
+          this.placeTransitionCorner(worldX, worldY, chunkSize, neighbors, isDirtLike, assetKeys.aobMap.grassDirtCornerOuter);
+          this.placeTransitionEdges(worldX, worldY, chunkSize, neighbors, isStoneLike, assetKeys.aobMap.grassStoneEdge, "east");
+          this.placeTransitionCorner(worldX, worldY, chunkSize, neighbors, isStoneLike, assetKeys.aobMap.grassStoneCornerOuter);
+          this.placeTransitionEdges(worldX, worldY, chunkSize, neighbors, (tile) => tile === "crystalGround", assetKeys.aobMap.crystalCliffEdge, "east");
+          continue;
+        }
+
+        if (isDirtLike(kind)) {
+          this.placeTransitionEdges(worldX, worldY, chunkSize, neighbors, isStoneLike, assetKeys.aobMap.dirtStoneEdge, "east");
+          this.placeTransitionCorner(worldX, worldY, chunkSize, neighbors, isStoneLike, assetKeys.aobMap.dirtStoneCornerOuter);
         }
       }
     }
   }
 
+  private placeTransitionEdges(
+    worldX: number,
+    worldY: number,
+    chunkSize: number,
+    neighbors: NeighboringTerrain,
+    matches: (tile: TileType) => boolean,
+    textureKey: string,
+    baseSide: CardinalSide,
+  ): void {
+    for (const side of CARDINAL_SIDES) {
+      if (!matches(neighbors[side])) {
+        continue;
+      }
+      this.add
+        .image(worldX, worldY, textureKey)
+        .setOrigin(0.5, 0.5)
+        .setDisplaySize(chunkSize, chunkSize)
+        .setAngle(rotationForSide(baseSide, side))
+        .setDepth(TERRAIN_TRANSITION_DEPTH);
+    }
+  }
+
+  private placeTransitionCorner(
+    worldX: number,
+    worldY: number,
+    chunkSize: number,
+    neighbors: NeighboringTerrain,
+    matches: (tile: TileType) => boolean,
+    textureKey: string,
+  ): void {
+    const { north, east, south, west } = neighbors;
+    let angle: number | undefined;
+
+    if (matches(south) && matches(east)) {
+      angle = 0;
+    } else if (matches(south) && matches(west)) {
+      angle = 90;
+    } else if (matches(north) && matches(west)) {
+      angle = 180;
+    } else if (matches(north) && matches(east)) {
+      angle = 270;
+    }
+
+    if (angle === undefined) {
+      return;
+    }
+
+    this.add
+      .image(worldX, worldY, textureKey)
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize(chunkSize, chunkSize)
+      .setAngle(angle)
+      .setDepth(TERRAIN_TRANSITION_DEPTH + 1);
+  }
+
   private createMapDecor(): void {
-    // Resource-looking props are now reserved for actual resource states.
+    const state = this.simulation.state;
+    const blocked = buildDecorBlockedTiles(state);
+
+    for (let y = 2; y < state.map.height - 2; y += 1) {
+      for (let x = 2; x < state.map.width - 2; x += 1) {
+        if (blocked.has(tileCoordKey(x, y))) {
+          continue;
+        }
+
+        const tile = state.map.tiles[y * state.map.width + x] ?? "grass";
+        const naturalDecor = naturalDecorForTile(state.map, tile, x, y);
+        if (!naturalDecor) {
+          continue;
+        }
+
+        this.addDecorSprite({
+          ...naturalDecor,
+          tileX: x,
+          tileY: y,
+        });
+        blocked.add(tileCoordKey(x, y));
+      }
+    }
+
+    for (const decor of villageDecorLayout()) {
+      if (blocked.has(tileCoordKey(decor.tileX, decor.tileY))) {
+        continue;
+      }
+      this.addDecorSprite(decor);
+      blocked.add(tileCoordKey(decor.tileX, decor.tileY));
+    }
+  }
+
+  private addDecorSprite(decor: DecorPlacement): void {
+    const worldX = decor.tileX * TILE_SIZE + TILE_SIZE / 2;
+    const worldY = decor.tileY * TILE_SIZE + TILE_SIZE / 2;
+    const sprite = this.add
+      .image(worldX, worldY, decor.key)
+      .setOrigin(decor.originX ?? 0.5, decor.originY ?? 0.86)
+      .setDepth(worldY + (decor.depthOffset ?? -2))
+      .setAlpha(decor.alpha ?? 1);
+
+    setMaxDisplaySize(sprite, decor.maxSize);
   }
 
   private createInput(): void {
@@ -256,6 +402,7 @@ export class WorldScene extends Phaser.Scene {
     this.placementType = undefined;
     this.wallLineStartTile = undefined;
     this.placementGraphics?.clear();
+    this.hidePlacementPreviewGround();
     this.hidePlacementPreviewSprite();
   }
 
@@ -339,6 +486,7 @@ export class WorldScene extends Phaser.Scene {
     const entities = this.simulation.state.entities;
     for (const [id, view] of this.entityViews) {
       if (!entities[id]) {
+        view.ground?.destroy();
         view.container.destroy(true);
         this.entityViews.delete(id);
       }
@@ -453,9 +601,11 @@ export class WorldScene extends Phaser.Scene {
       }
       sprites.push(sprite);
     } else {
-      const soil = this.add.sprite(0, 2, assetKeys.elements.soil).setOrigin(0.5, 0.5).setScale(1.2);
-      const crop = this.add.sprite(0, -2, assetKeys.elements.carrot).setOrigin(0.5, 0.7).setScale(1.1);
-      sprites.push(soil, crop);
+      const placeholder = this.add.sprite(0, 3, assetKeys.aobMap.bush).setOrigin(0.5, 0.86);
+      setMaxDisplaySize(placeholder, 36);
+      placeholder.setTint(0xa6b769);
+      placeholder.setAlpha(0.82);
+      sprites.push(placeholder);
     }
 
     for (const sprite of sprites) {
@@ -470,6 +620,7 @@ export class WorldScene extends Phaser.Scene {
 
   private createBuildingView(entity: GameEntity): EntityView {
     const container = this.add.container(entity.position.x, entity.position.y);
+    const ground = createGroundPad(this, entity.building?.type);
     const graphics = this.add.graphics();
     container.add(graphics);
     const sprites: Phaser.GameObjects.Sprite[] = [];
@@ -503,7 +654,7 @@ export class WorldScene extends Phaser.Scene {
     const health = this.add.graphics();
     container.add(selection);
     container.add(health);
-    return { container, sprites, graphics, selection, health, staticBuildingType, lastBuildingTexture: staticKey };
+    return { container, ground, sprites, graphics, selection, health, staticBuildingType, lastBuildingTexture: staticKey };
   }
 
   private updateEntityView(entity: GameEntity, view: EntityView): void {
@@ -516,6 +667,7 @@ export class WorldScene extends Phaser.Scene {
     }
     if (view.graphics && entity.building) {
       const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age : undefined;
+      this.updateBuildingGround(entity, view, ownerAge ?? "genesis");
       drawBuilding(view.graphics, entity, view.sprites.length > 0, ownerAge);
       this.updateBuildingSprites(entity, view, ownerAge);
     }
@@ -584,6 +736,27 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private updateBuildingGround(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
+    const ground = view.ground;
+    if (!entity.building || !ground) {
+      return;
+    }
+
+    if (entity.building.type === "wall" || entity.building.type === "enemyCamp") {
+      ground.setVisible(false);
+      return;
+    }
+
+    const bounds = buildingGroundBoundsForType(entity.building.type, ownerAge);
+    const centerY = bounds.y + bounds.height / 2;
+    ground.setVisible(true);
+    ground.setDepth(GROUND_PAD_DEPTH);
+    ground.setPosition(entity.position.x, entity.position.y + centerY);
+    ground.setSize(bounds.width, bounds.height);
+    ground.setDisplaySize(bounds.width, bounds.height);
+    ground.setAlpha(entity.building.completed ? 0.82 : 0.62);
+  }
+
   private updateStaticBuildingSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
     const sprite = view.sprites[0];
     if (!sprite || !entity.building || !view.staticBuildingType) {
@@ -639,6 +812,9 @@ export class WorldScene extends Phaser.Scene {
     const color = entity.kind === "resource" ? 0xf2d36b : entity.ownerId === PLAYER_ID ? 0xb4f36b : 0xe85a4a;
     view.selection.lineStyle(2, color, 0.95);
     if (entity.building) {
+      const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age ?? "genesis" : "genesis";
+      const bounds = buildingGroundBoundsForType(entity.building.type, ownerAge);
+      view.selection.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
       return;
     } else {
       view.selection.strokeEllipse(0, 0, 24, 13);
@@ -852,25 +1028,28 @@ export class WorldScene extends Phaser.Scene {
   private updatePlacementPreview(): void {
     this.placementGraphics?.clear();
     if (!this.placementType) {
+      this.hidePlacementPreviewGround();
       this.hidePlacementPreviewSprite();
       return;
     }
     const pointer = this.input.activePointer;
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
     if (this.placementType === "wall") {
+      this.hidePlacementPreviewGround();
       this.hidePlacementPreviewSprite();
       this.updateWallPlacementPreview(tile);
       return;
     }
     const config = buildingConfigs[this.placementType];
+    const playerAge = this.simulation.state.players[PLAYER_ID].age;
     const valid = canPlaceBuildingAt(this.simulation.state, this.placementType, tile);
-    const x = tile.x * TILE_SIZE;
-    const y = tile.y * TILE_SIZE;
-    const width = config.footprint.w * TILE_SIZE;
-    const height = config.footprint.h * TILE_SIZE;
-    this.placementGraphics?.lineStyle(2, valid ? 0xaee783 : 0xe66a58, 0.95);
-    this.placementGraphics?.strokeRect(x, y, width, height);
+    const centerX = (tile.x + config.footprint.w / 2) * TILE_SIZE;
+    const centerY = (tile.y + config.footprint.h / 2) * TILE_SIZE;
+    const bounds = buildingGroundBoundsForType(this.placementType, playerAge);
+    this.updatePlacementPreviewGround(this.placementType, centerX, centerY, valid);
     this.updatePlacementPreviewSprite(this.placementType, tile, valid);
+    this.placementGraphics?.lineStyle(2, valid ? 0xaee783 : 0xe66a58, 0.95);
+    this.placementGraphics?.strokeRect(bounds.x + centerX, bounds.y + centerY, bounds.width, bounds.height);
   }
 
   private updatePlacementPreviewSprite(type: BuildingType, tile: TileCoord, valid: boolean): void {
@@ -903,6 +1082,31 @@ export class WorldScene extends Phaser.Scene {
     this.placementPreviewSprite?.setVisible(false);
   }
 
+  private updatePlacementPreviewGround(type: BuildingType, centerX: number, centerY: number, valid: boolean): void {
+    const age = this.simulation.state.players[PLAYER_ID].age;
+    const bounds = buildingGroundBoundsForType(type, age);
+    if (!this.placementPreviewGround) {
+      this.placementPreviewGround = this.add
+        .tileSprite(centerX, centerY + bounds.y + bounds.height / 2, bounds.width, bounds.height, assetKeys.aobMap.baseDirt)
+        .setOrigin(0.5, 0.5)
+        .setDepth(GROUND_PAD_DEPTH);
+    }
+
+    this.placementPreviewGround.setVisible(true);
+    this.placementPreviewGround.setPosition(centerX, centerY + bounds.y + bounds.height / 2);
+    this.placementPreviewGround.setSize(bounds.width, bounds.height);
+    this.placementPreviewGround.setDisplaySize(bounds.width, bounds.height);
+    this.placementPreviewGround.setAlpha(valid ? 0.48 : 0.32);
+    this.placementPreviewGround.clearTint();
+    if (!valid) {
+      this.placementPreviewGround.setTint(0xf0a090);
+    }
+  }
+
+  private hidePlacementPreviewGround(): void {
+    this.placementPreviewGround?.setVisible(false);
+  }
+
   private updateWallPlacementPreview(hoverTile: TileCoord): void {
     const start = this.wallLineStartTile ?? hoverTile;
     const end = normalizeWallLineEnd(start, hoverTile);
@@ -920,7 +1124,7 @@ export class WorldScene extends Phaser.Scene {
 
   private getEntityAt(point: Vec2): GameEntity | undefined {
     const entities = Object.values(this.simulation.state.entities)
-      .filter((entity) => hitTestEntity(entity, point))
+      .filter((entity) => hitTestEntity(entity, point, this.simulation.state.players[entity.ownerId ?? PLAYER_ID]?.age))
       .sort((a, b) => b.position.y - a.position.y);
     return entities[0];
   }
@@ -1072,7 +1276,11 @@ export class WorldScene extends Phaser.Scene {
   }
 }
 
-function terrainFrameForChunk(map: MapState, startX: number, startY: number): number {
+function terrainKindForChunk(map: MapState, startX: number, startY: number): TileType {
+  if (startX < 0 || startY < 0 || startX >= map.width || startY >= map.height) {
+    return "deepWater";
+  }
+
   const counts: Record<TileType, number> = {
     grass: 0,
     grassDark: 0,
@@ -1091,28 +1299,66 @@ function terrainFrameForChunk(map: MapState, startX: number, startY: number): nu
     }
   }
 
-  if (counts.deepWater >= 3) {
-    return TERRAIN_FRAMES.deepWater;
+  const area = Math.min(map.width - startX, TERRAIN_CHUNK_TILES) * Math.min(map.height - startY, TERRAIN_CHUNK_TILES);
+  if (counts.deepWater >= area * 0.28) {
+    return "deepWater";
   }
-  if (counts.water >= 3) {
-    return TERRAIN_FRAMES.water;
+  if (counts.water + counts.deepWater >= area * 0.36) {
+    return counts.deepWater > counts.water ? "deepWater" : "water";
   }
-  if (counts.crystalGround >= 2) {
-    return TERRAIN_FRAMES.crystalDirt;
+  if (counts.crystalGround >= area * 0.34) {
+    return "crystalGround";
   }
-  if (counts.stoneGround >= 2) {
-    return TERRAIN_FRAMES.rocky;
+  if (counts.stoneGround >= area * 0.34) {
+    return "stoneGround";
   }
-  if (counts.path >= 2) {
-    return TERRAIN_FRAMES.dirt;
+  if (counts.path >= area * 0.12) {
+    return "path";
   }
-  if (counts.dirt >= 2) {
-    return TERRAIN_FRAMES.dirt;
+  if (counts.dirt >= area * 0.16) {
+    return "dirt";
   }
-  if (counts.grassDark > 8 && hash2(startX, startY) % 9 === 0) {
-    return TERRAIN_FRAMES.rocky;
+  return counts.grassDark > counts.grass ? "grassDark" : "grass";
+}
+
+function terrainTextureKeyForChunk(kind: TileType): string {
+  switch (kind) {
+    case "dirt":
+    case "path":
+      return assetKeys.aobMap.baseDirt;
+    case "stoneGround":
+      return assetKeys.aobMap.baseRocky;
+    case "crystalGround":
+      return assetKeys.aobMap.crystalGround;
+    case "water":
+    case "deepWater":
+      return assetKeys.aobMap.baseShallowWater;
+    case "grass":
+    case "grassDark":
+    default:
+      return assetKeys.aobMap.baseGrass;
   }
-  return TERRAIN_FRAMES.grass;
+}
+
+function canMirrorTerrainChunk(kind: TileType): boolean {
+  return kind === "grass" || kind === "grassDark" || kind === "dirt" || kind === "path";
+}
+
+function isGrassLike(tile: TileType): boolean {
+  return tile === "grass" || tile === "grassDark";
+}
+
+function isDirtLike(tile: TileType): boolean {
+  return tile === "dirt" || tile === "path";
+}
+
+function isStoneLike(tile: TileType): boolean {
+  return tile === "stoneGround";
+}
+
+function rotationForSide(baseSide: CardinalSide, targetSide: CardinalSide): number {
+  const indexDelta = CARDINAL_SIDES.indexOf(targetSide) - CARDINAL_SIDES.indexOf(baseSide);
+  return ((indexDelta % 4) + 4) % 4 * 90;
 }
 
 function hash2(x: number, y: number): number {
@@ -1140,6 +1386,17 @@ type ResourceVisual = {
   alpha?: number;
 };
 
+type DecorPlacement = {
+  tileX: number;
+  tileY: number;
+  key: string;
+  maxSize: number;
+  originX?: number;
+  originY?: number;
+  alpha?: number;
+  depthOffset?: number;
+};
+
 function resourceVisualFor(entity: GameEntity): ResourceVisual | undefined {
   const node = entity.resourceNode;
   if (!node) {
@@ -1152,74 +1409,75 @@ function resourceVisualFor(entity: GameEntity): ResourceVisual | undefined {
       if (depleted) {
         return {
           key: assetKeys.aobMap.stump,
-          maxSize: 30,
+          maxSize: 36,
           originX: 0.5,
-          originY: 0.82,
+          originY: 0.9,
           x: 0,
           y: 4,
           alpha: 0.95,
         };
       }
+      const treeVariants = [assetKeys.aobMap.trees, assetKeys.aobMap.treesAlt, assetKeys.aobMap.pineTree] as const;
+      const treeKey = treeVariants[numericId(entity.id) % treeVariants.length] ?? assetKeys.aobMap.trees;
       return {
-        key: assetKeys.aobMap.trees,
-        maxSize: 62 + (numericId(entity.id) % 4) * 3,
+        key: treeKey,
+        maxSize: treeKey === assetKeys.aobMap.pineTree ? 70 : 78 + (numericId(entity.id) % 3) * 4,
         originX: 0.5,
-        originY: 0.86,
+        originY: treeKey === assetKeys.aobMap.pineTree ? 0.92 : 0.9,
         x: 0,
-        y: 2,
-        tint: numericId(entity.id) % 3 === 0 ? 0xe3f2b1 : undefined,
+        y: treeKey === assetKeys.aobMap.pineTree ? 3 : 2,
       };
     case "berries":
       if (depleted) {
         return {
           key: assetKeys.aobMap.bush,
-          maxSize: 27,
+          maxSize: 34,
           originX: 0.5,
-          originY: 0.78,
+          originY: 0.86,
           x: 0,
-          y: 3,
+          y: 4,
           alpha: 0.9,
         };
       }
       return {
         key: assetKeys.aobMap.fruitBush,
-        maxSize: 39 + (numericId(entity.id) % 3) * 3,
+        maxSize: 48 + (numericId(entity.id) % 2) * 4,
         originX: 0.5,
-        originY: 0.77,
+        originY: 0.86,
         x: 0,
-        y: 1,
+        y: 3,
       };
     case "stone": {
       const depletedStone = {
         key: assetKeys.aobMap.rock,
-        maxSize: 22,
+        maxSize: 28,
         originX: 0.5,
-        originY: 0.76,
+        originY: 0.86,
         x: 0,
-        y: 3,
+        y: 4,
         alpha: 0.65,
       };
       if (depleted) {
         return depletedStone;
       }
-      const key = numericId(entity.id) % 2 === 0 ? assetKeys.aobMap.rocks : assetKeys.aobMap.bigRocks;
+      const key = numericId(entity.id) % 3 === 0 ? assetKeys.aobMap.bigRocks : assetKeys.aobMap.rocks;
       return {
         key,
-        maxSize: key === assetKeys.aobMap.rocks ? 42 : 50,
+        maxSize: key === assetKeys.aobMap.rocks ? 50 : 58,
         originX: 0.5,
-        originY: 0.76,
+        originY: 0.86,
         x: 0,
-        y: 1,
+        y: 2,
       };
     }
     case "gold":
       return {
-        key: assetKeys.aobMap.crystalNode,
-        maxSize: depleted ? 28 : 48,
+        key: depleted ? assetKeys.aobMap.crystalSprout : numericId(entity.id) % 2 === 0 ? assetKeys.aobMap.crystalNode : assetKeys.aobMap.crystalNodeAlt,
+        maxSize: depleted ? 34 : 60,
         originX: 0.5,
-        originY: 0.78,
+        originY: depleted ? 0.88 : 0.9,
         x: 0,
-        y: depleted ? 3 : -1,
+        y: depleted ? 4 : 1,
         alpha: depleted ? 0.55 : 1,
       };
     case "farmFood":
@@ -1319,14 +1577,16 @@ function buildingStaticVisualSizeForType(type: BuildingType): number {
     case "townCenter":
       return 300;
     case "house":
-      return 180;
+      return 198;
     case "lumberCamp":
+      return 222;
     case "mill":
+      return 320;
     case "stoneCamp":
     case "goldCamp":
       return 210;
     case "farm":
-      return 210;
+      return 330;
     case "barracks":
       return 235;
     case "watchTower":
@@ -1338,6 +1598,74 @@ function buildingStaticVisualSizeForType(type: BuildingType): number {
 
 function constructionVisualSizeForType(type: BuildingType): number {
   return Math.round(buildingStaticVisualSizeForType(type) * 0.72);
+}
+
+function buildingGroundBoundsForType(type: BuildingType, age: AgeId): { x: number; y: number; width: number; height: number } {
+  const footprint = buildingConfigs[type].footprint;
+  const ageScale = age === "genesis" ? 1.06 : age === "settlement" ? 1.14 : 1.22;
+  const padding = buildingGroundPaddingForType(type);
+  const yOffset = buildingGroundYOffsetForType(type);
+  const width = roundedEven(footprint.w * TILE_SIZE * ageScale + padding.x);
+  const height = roundedEven(footprint.h * TILE_SIZE * ageScale + padding.y);
+  return {
+    x: -width / 2,
+    y: -height / 2 + yOffset,
+    width,
+    height,
+  };
+}
+
+function buildingGroundPaddingForType(type: BuildingType): { x: number; y: number } {
+  switch (type) {
+    case "townCenter":
+      return { x: 14, y: 18 };
+    case "house":
+      return { x: 56, y: 20 };
+    case "farm":
+      return { x: 112, y: 28 };
+    case "watchTower":
+      return { x: 18, y: 18 };
+    case "barracks":
+      return { x: 20, y: 18 };
+    case "lumberCamp":
+      return { x: 82, y: 22 };
+    case "mill":
+      return { x: 114, y: 28 };
+    case "stoneCamp":
+    case "goldCamp":
+      return { x: 18, y: 16 };
+    default:
+      return { x: 8, y: 8 };
+  }
+}
+
+function buildingGroundYOffsetForType(type: BuildingType): number {
+  switch (type) {
+    case "townCenter":
+      return -2;
+    case "house":
+      return -8;
+    case "farm":
+      return -9;
+    case "watchTower":
+      return -8;
+    case "barracks":
+      return -8;
+    case "lumberCamp":
+      return -8;
+    case "mill":
+      return -8;
+    case "stoneCamp":
+    case "goldCamp":
+      return -7;
+    default:
+      return -4;
+  }
+}
+
+function roundedEven(value: number): number {
+  const rounded = Math.round(value);
+  return rounded % 2 === 0 ? rounded : rounded + 1;
 }
 
 function buildingVisualSize(entity: GameEntity): number {
@@ -1469,20 +1797,20 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
   const config = buildingConfigs[entity.building.type];
   const width = entity.building.footprint.w * TILE_SIZE;
   const height = entity.building.footprint.h * TILE_SIZE;
+  const age = ownerAge ?? "genesis";
+  const groundBounds = buildingGroundBoundsForType(entity.building.type, age);
   const alpha = entity.building.completed ? 0.96 : 0.52;
   const x = -width / 2;
   const y = -height / 2;
   const progress = entity.building.completed ? 1 : entity.building.buildProgress / Math.max(1, entity.building.buildTimeTicks);
 
   if (hasSprite) {
-    graphics.fillStyle(0x17110c, 0.16);
-    graphics.fillEllipse(0, height * 0.43, width * 0.72, Math.max(8, height * 0.16));
-    drawAgeFoundation(graphics, ownerAge, width, height);
+    drawAgeFoundation(graphics, age, groundBounds.width, groundBounds.height);
     if (!entity.building.completed) {
       graphics.fillStyle(0xe3b85c, 0.95);
       graphics.fillRect(x + 3, y + height - 7, (width - 6) * progress, 4);
       graphics.lineStyle(1, 0xf4dc94, 0.7);
-      graphics.strokeRect(x, y, width, height);
+      graphics.strokeRect(groundBounds.x, groundBounds.y, groundBounds.width, groundBounds.height);
     }
     if (entity.farm?.depleted) {
       graphics.fillStyle(0x251914, 0.5);
@@ -1492,8 +1820,6 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
     }
     return;
   }
-  graphics.fillStyle(0x221712, 0.28);
-  graphics.fillRect(x + 2, y + 4, width, height);
   graphics.fillStyle(config.color, alpha);
   graphics.fillRect(x, y + height * 0.34, width, height * 0.66);
   graphics.lineStyle(1, 0x211611, 0.65);
@@ -1537,6 +1863,124 @@ function drawAgeFoundation(graphics: Phaser.GameObjects.Graphics, ownerAge: AgeI
   }
 }
 
+function createGroundPad(scene: Phaser.Scene, type: BuildingType | undefined): Phaser.GameObjects.TileSprite | undefined {
+  if (!type || type === "wall" || type === "enemyCamp") {
+    return undefined;
+  }
+
+  return scene.add
+    .tileSprite(0, 0, 64, 64, assetKeys.aobMap.baseDirt)
+    .setOrigin(0.5, 0.5);
+}
+
+function isWaterChunk(tile: TileType): boolean {
+  return tile === "water" || tile === "deepWater";
+}
+
+function naturalDecorForTile(map: MapState, tile: TileType, x: number, y: number): Omit<DecorPlacement, "tileX" | "tileY"> | undefined {
+  const hash = hash2(x, y);
+  const distanceFromStart = Phaser.Math.Distance.Between(x, y, 56, 56);
+  const nearWater = hasNearbyTile(map, x, y, isWaterChunk, 2);
+
+  if ((tile === "grass" || tile === "grassDark") && distanceFromStart > 14 && !nearWater) {
+    if (hash % 577 === 0) {
+      return { key: assetKeys.aobMap.bush, maxSize: 34, originY: 0.88, alpha: 0.92 };
+    }
+    if (hash % 883 === 0) {
+      const treeRoll = hash % 3;
+      return {
+        key: treeRoll === 0 ? assetKeys.aobMap.trees : treeRoll === 1 ? assetKeys.aobMap.treesAlt : assetKeys.aobMap.pineTree,
+        maxSize: treeRoll === 2 ? 56 : 64,
+        originY: treeRoll === 2 ? 0.92 : 0.9,
+        alpha: 0.94,
+      };
+    }
+    if (hash % 431 === 0) {
+      return { key: assetKeys.aobMap.flowerPatch, maxSize: 30, originY: 0.88, alpha: 0.9 };
+    }
+    if (hash % 271 === 0) {
+      return { key: assetKeys.aobMap.grassPatch, maxSize: 30, originY: 0.88, alpha: 0.88 };
+    }
+  }
+
+  if (tile === "stoneGround" && hash % 137 === 0) {
+    return { key: assetKeys.aobMap.rock, maxSize: 24, originY: 0.86, alpha: 0.74 };
+  }
+
+  if (tile === "crystalGround" && hash % 149 === 0) {
+    return { key: assetKeys.aobMap.crystalSprout, maxSize: 28, originY: 0.88, alpha: 0.9 };
+  }
+
+  return undefined;
+}
+
+function hasNearbyTile(map: MapState, x: number, y: number, matches: (tile: TileType) => boolean, radius: number): boolean {
+  for (let offsetY = -radius; offsetY <= radius; offsetY += 1) {
+    for (let offsetX = -radius; offsetX <= radius; offsetX += 1) {
+      const tile = map.tiles[(y + offsetY) * map.width + (x + offsetX)];
+      if (tile && matches(tile)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function villageDecorLayout(): DecorPlacement[] {
+  return [
+    { tileX: 44, tileY: 52, key: assetKeys.aobMap.sign, maxSize: 28, originY: 0.92 },
+    { tileX: 45, tileY: 61, key: assetKeys.aobMap.fence, maxSize: 34, originY: 0.9 },
+    { tileX: 44, tileY: 62, key: assetKeys.aobMap.fenceCorner, maxSize: 34, originY: 0.9 },
+    { tileX: 47, tileY: 64, key: assetKeys.aobMap.bench, maxSize: 32, originY: 0.9 },
+    { tileX: 50, tileY: 49, key: assetKeys.aobMap.sacks, maxSize: 30, originY: 0.9 },
+    { tileX: 50, tileY: 60, key: assetKeys.aobMap.crates, maxSize: 30, originY: 0.9 },
+    { tileX: 58, tileY: 66, key: assetKeys.aobMap.trough, maxSize: 34, originY: 0.9 },
+    { tileX: 63, tileY: 49, key: assetKeys.aobMap.torch, maxSize: 32, originY: 0.93 },
+    { tileX: 64, tileY: 60, key: assetKeys.aobMap.barrels, maxSize: 30, originY: 0.9 },
+    { tileX: 42, tileY: 55, key: assetKeys.aobMap.woodPile, maxSize: 38, originY: 0.9 },
+    { tileX: 83, tileY: 44, key: assetKeys.aobMap.cart, maxSize: 34, originY: 0.9 },
+    { tileX: 88, tileY: 46, key: assetKeys.aobMap.flag, maxSize: 30, originY: 0.94 },
+    { tileX: 89, tileY: 79, key: assetKeys.aobMap.well, maxSize: 34, originY: 0.9 },
+    { tileX: 95, tileY: 80, key: assetKeys.aobMap.anvil, maxSize: 30, originY: 0.9 },
+    { tileX: 101, tileY: 62, key: assetKeys.aobMap.logStack, maxSize: 38, originY: 0.9 },
+  ];
+}
+
+function buildDecorBlockedTiles(state: Simulation["state"]): Set<string> {
+  const blocked = new Set<string>();
+
+  for (const entity of Object.values(state.entities)) {
+    if (entity.unit) {
+      continue;
+    }
+
+    if (entity.building) {
+      const centerTile = worldToTile(entity.position);
+      const startX = centerTile.x - Math.floor(entity.building.footprint.w / 2) - 1;
+      const startY = centerTile.y - Math.floor(entity.building.footprint.h / 2) - 1;
+      for (let y = startY; y < startY + entity.building.footprint.h + 2; y += 1) {
+        for (let x = startX; x < startX + entity.building.footprint.w + 2; x += 1) {
+          blocked.add(tileCoordKey(x, y));
+        }
+      }
+      continue;
+    }
+
+    const tile = worldToTile(entity.position);
+    for (let oy = -1; oy <= 1; oy += 1) {
+      for (let ox = -1; ox <= 1; ox += 1) {
+        blocked.add(tileCoordKey(tile.x + ox, tile.y + oy));
+      }
+    }
+  }
+
+  return blocked;
+}
+
+function tileCoordKey(x: number, y: number): string {
+  return `${x}:${y}`;
+}
+
 function drawWall(graphics: Phaser.GameObjects.Graphics, entity: GameEntity, ownerAge: AgeId): void {
   if (!entity.building) {
     return;
@@ -1548,8 +1992,6 @@ function drawWall(graphics: Phaser.GameObjects.Graphics, entity: GameEntity, own
   const y = -height / 2;
   const progress = entity.building.completed ? 1 : entity.building.buildProgress / Math.max(1, entity.building.buildTimeTicks);
 
-  graphics.fillStyle(0x120e0b, 0.2);
-  graphics.fillEllipse(0, 5, width * 0.95, 8);
   graphics.lineStyle(1, 0x1a120d, 0.5);
 
   if (tier.id === "palisade") {
@@ -1592,11 +2034,15 @@ function drawWall(graphics: Phaser.GameObjects.Graphics, entity: GameEntity, own
   }
 }
 
-function hitTestEntity(entity: GameEntity, point: Vec2): boolean {
+function hitTestEntity(entity: GameEntity, point: Vec2, ownerAge: AgeId | undefined): boolean {
   if (entity.building) {
-    const width = entity.building.footprint.w * TILE_SIZE;
-    const height = entity.building.footprint.h * TILE_SIZE;
-    return point.x >= entity.position.x - width / 2 && point.x <= entity.position.x + width / 2 && point.y >= entity.position.y - height / 2 && point.y <= entity.position.y + height / 2;
+    const bounds = buildingGroundBoundsForType(entity.building.type, ownerAge ?? "genesis");
+    return (
+      point.x >= entity.position.x + bounds.x &&
+      point.x <= entity.position.x + bounds.x + bounds.width &&
+      point.y >= entity.position.y + bounds.y &&
+      point.y <= entity.position.y + bounds.y + bounds.height
+    );
   }
   if (entity.resourceNode) {
     return Phaser.Math.Distance.Between(entity.position.x, entity.position.y, point.x, point.y) <= resourceHitRadius(entity);

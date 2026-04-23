@@ -9,24 +9,28 @@ type NodeRecord = {
   cameFrom?: string;
 };
 
+type NeighborStep = {
+  tile: TileCoord;
+  cost: number;
+};
+
 function key(tile: TileCoord): string {
   return `${tile.x},${tile.y}`;
 }
 
 function heuristic(a: TileCoord, b: TileCoord): number {
-  return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const dx = Math.abs(a.x - b.x);
+  const dy = Math.abs(a.y - b.y);
+  return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 }
 
 export function findPath(state: GameState, from: Vec2, to: Vec2): Vec2[] {
   const start = worldToTile(from);
-  const goal = worldToTile(to);
+  const requestedGoal = worldToTile(to);
+  const goal = resolveGoalTile(state, start, requestedGoal);
 
-  if (!isInsideMap(state.map, goal.x, goal.y)) {
+  if (!goal || !isInsideMap(state.map, goal.x, goal.y)) {
     return [];
-  }
-
-  if (!isTileWalkableForUnit(state, goal)) {
-    return [to];
   }
 
   const open = new Map<string, NodeRecord>();
@@ -64,19 +68,19 @@ export function findPath(state: GameState, from: Vec2, to: Vec2): Vec2[] {
     open.delete(currentKey);
     closed.add(currentKey);
 
-    for (const neighbor of neighbors(current.tile)) {
-      const neighborKey = key(neighbor);
-      if (closed.has(neighborKey) || !isTileWalkableForUnit(state, neighbor)) {
+    for (const neighbor of neighbors(state, current.tile)) {
+      const neighborKey = key(neighbor.tile);
+      if (closed.has(neighborKey) || !isTileWalkableForUnit(state, neighbor.tile)) {
         continue;
       }
 
-      const tentativeG = current.g + 1;
+      const tentativeG = current.g + neighbor.cost;
       const existing = records.get(neighborKey);
       if (!existing || tentativeG < existing.g) {
         const next: NodeRecord = {
-          tile: neighbor,
+          tile: neighbor.tile,
           g: tentativeG,
-          f: tentativeG + heuristic(neighbor, goal),
+          f: tentativeG + heuristic(neighbor.tile, goal),
           cameFrom: currentKey,
         };
         records.set(neighborKey, next);
@@ -85,16 +89,35 @@ export function findPath(state: GameState, from: Vec2, to: Vec2): Vec2[] {
     }
   }
 
-  return [to];
+  return [];
 }
 
-function neighbors(tile: TileCoord): TileCoord[] {
-  return [
-    { x: tile.x + 1, y: tile.y },
-    { x: tile.x - 1, y: tile.y },
-    { x: tile.x, y: tile.y + 1 },
-    { x: tile.x, y: tile.y - 1 },
-  ];
+function neighbors(state: GameState, tile: TileCoord): NeighborStep[] {
+  const offsets = [
+    { x: 1, y: 0, cost: 1 },
+    { x: -1, y: 0, cost: 1 },
+    { x: 0, y: 1, cost: 1 },
+    { x: 0, y: -1, cost: 1 },
+    { x: 1, y: 1, cost: Math.SQRT2 },
+    { x: 1, y: -1, cost: Math.SQRT2 },
+    { x: -1, y: 1, cost: Math.SQRT2 },
+    { x: -1, y: -1, cost: Math.SQRT2 },
+  ] as const;
+
+  return offsets.flatMap((offset) => {
+    const next = { x: tile.x + offset.x, y: tile.y + offset.y };
+    if (!isInsideMap(state.map, next.x, next.y)) {
+      return [];
+    }
+    if (offset.x !== 0 && offset.y !== 0) {
+      const sideA = { x: tile.x + offset.x, y: tile.y };
+      const sideB = { x: tile.x, y: tile.y + offset.y };
+      if (!isTileWalkableForUnit(state, sideA) || !isTileWalkableForUnit(state, sideB)) {
+        return [];
+      }
+    }
+    return [{ tile: next, cost: offset.cost }];
+  });
 }
 
 function reconstructPath(records: Map<string, NodeRecord>, endKey: string): TileCoord[] {
@@ -110,4 +133,55 @@ function reconstructPath(records: Map<string, NodeRecord>, endKey: string): Tile
   }
   reversed.reverse();
   return reversed.slice(1);
+}
+
+function resolveGoalTile(state: GameState, start: TileCoord, requestedGoal: TileCoord): TileCoord | undefined {
+  if (!isInsideMap(state.map, requestedGoal.x, requestedGoal.y)) {
+    return undefined;
+  }
+  if (isTileWalkableForUnit(state, requestedGoal)) {
+    return requestedGoal;
+  }
+
+  let bestTile: TileCoord | undefined;
+  let bestDistanceToGoal = Number.POSITIVE_INFINITY;
+  let bestDistanceFromStart = Number.POSITIVE_INFINITY;
+
+  for (let radius = 1; radius <= 12; radius += 1) {
+    for (const candidate of ringTiles(requestedGoal, radius)) {
+      if (!isInsideMap(state.map, candidate.x, candidate.y) || !isTileWalkableForUnit(state, candidate)) {
+        continue;
+      }
+
+      const distanceToGoal = heuristic(candidate, requestedGoal);
+      const distanceFromStart = heuristic(start, candidate);
+      if (
+        distanceToGoal < bestDistanceToGoal ||
+        (distanceToGoal === bestDistanceToGoal && distanceFromStart < bestDistanceFromStart)
+      ) {
+        bestTile = candidate;
+        bestDistanceToGoal = distanceToGoal;
+        bestDistanceFromStart = distanceFromStart;
+      }
+    }
+
+    if (bestTile) {
+      return bestTile;
+    }
+  }
+
+  return undefined;
+}
+
+function ringTiles(center: TileCoord, radius: number): TileCoord[] {
+  const tiles: TileCoord[] = [];
+  for (let y = center.y - radius; y <= center.y + radius; y += 1) {
+    for (let x = center.x - radius; x <= center.x + radius; x += 1) {
+      const onRing = x === center.x - radius || x === center.x + radius || y === center.y - radius || y === center.y + radius;
+      if (onRing) {
+        tiles.push({ x, y });
+      }
+    }
+  }
+  return tiles;
 }

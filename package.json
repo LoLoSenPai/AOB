@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "assets:buildings": "powershell -ExecutionPolicy Bypass -File ./scripts/generate-building-atlases.ps1",
+    "assets:map": "powershell -ExecutionPolicy Bypass -File ./scripts/generate-map-runtime.ps1",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run tests/core",
     "preview": "vite preview --host 0.0.0.0",

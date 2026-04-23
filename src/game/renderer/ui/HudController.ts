@@ -60,6 +60,8 @@ export class HudController {
     const selected = state.selection.selectedIds.map((id) => state.entities[id]).filter(Boolean);
     const primary = selected[0];
     const resourceMarkup = RESOURCE_TYPES.map((type) => resourcePill(type, player.resources[type])).join("");
+    const queuedPopulation = queuedPopulationForPlayer(state);
+    const population = populationStatus(state);
     const age = ageConfigs[player.age];
     const ageProgress = player.ageProgress
       ? `<span class="status-pill age-pill"><span>${ageConfigs[player.ageProgress.targetAge].label}</span><span class="age-progress"><span style="width:${Math.round((1 - player.ageProgress.remainingTicks / player.ageProgress.totalTicks) * 100)}%"></span></span></span>`
@@ -69,8 +71,9 @@ export class HudController {
       <div class="hud-topbar">
         <div class="resource-strip">${resourceMarkup}</div>
         ${ageProgress}
-        <span class="status-pill">Pop ${player.population}/${player.populationCap}</span>
+        <span class="status-pill ${population.pillClass}">Pop ${player.population}/${player.populationCap}${queuedPopulation > 0 ? ` (+${queuedPopulation} queued)` : ""}</span>
       </div>
+      ${population.banner}
       ${primary ? panelMarkup(primary, selected, state) : ""}
       ${commandDockMarkup(state, primary, context)}
       ${messagesMarkup(state)}
@@ -160,10 +163,12 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
 
   const hasWorker = state.selection.selectedIds.some((id) => Boolean(state.entities[id]?.worker && state.entities[id]?.ownerId === PLAYER_ID));
   if (context.buildMenuOpen && hasWorker) {
+    const population = populationStatus(state);
     return `
       <div class="command-dock">
         <div class="command-section">
           <button class="command-button command-wide" data-close-build="true">Back</button>
+          ${population.buildHint}
           ${buildMenuMarkup(state)}
         </div>
       </div>
@@ -213,19 +218,35 @@ function buildButton(state: GameState, type: BuildingType): string {
   const config = buildingConfigs[type];
   const cost = costForBuilding(type, player.age);
   const locked = !hasReachedAge(player.age, config.unlockedAge);
-  const disabled = locked || !canAfford(player.resources, cost);
+  const affordable = canAfford(player.resources, cost);
+  const disabled = locked || !affordable;
   const labelText = shortLabel(labelForBuilding(type, player.age));
-  const lockText = locked ? `<span class="lock-label">${ageConfigs[config.unlockedAge].label}</span>` : costLabel(cost);
-  return `<button class="command-button" data-build="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${labelText}</span>${lockText}</button>`;
+  const population = populationStatus(state);
+  const suggested = type === "house" && population.blocked;
+  const subtitle = locked
+    ? ageConfigs[config.unlockedAge].label
+    : suggested
+      ? "Need cap"
+      : affordable
+        ? undefined
+        : "Need res.";
+  const body = subtitle ? `<span class="lock-label">${subtitle}</span>` : costLabel(cost);
+  return `<button class="command-button ${suggested ? "command-button--suggested" : ""}" data-build="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${labelText}</span>${body}</button>`;
 }
 
 function producerButtons(entity: GameEntity, state: GameState): string {
   const producerTypes = entity.building ? buildingConfigs[entity.building.type].producer ?? [] : [];
+  const population = populationStatus(state);
   return producerTypes
     .map((type) => {
       const config = unitConfigs[type];
-      const disabled = !hasReachedAge(state.players[PLAYER_ID].age, config.unlockedAge) || !canAfford(state.players[PLAYER_ID].resources, config.cost);
-      return `<button class="command-button" data-train="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${shortLabel(config.label)}</span>${costLabel(config.cost)}</button>`;
+      const locked = !hasReachedAge(state.players[PLAYER_ID].age, config.unlockedAge);
+      const affordable = canAfford(state.players[PLAYER_ID].resources, config.cost);
+      const blockedByPopulation = population.usedWithQueue + config.population > population.cap;
+      const disabled = locked || !affordable || blockedByPopulation;
+      const reason = locked ? ageConfigs[config.unlockedAge].label : blockedByPopulation ? "Need House" : !affordable ? "Need res." : undefined;
+      const body = reason ? `<span class="lock-label">${reason}</span>` : costLabel(config.cost);
+      return `<button class="command-button ${blockedByPopulation ? "command-button--blocked" : ""}" data-train="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${shortLabel(config.label)}</span>${body}</button>`;
     })
     .join("");
 }
@@ -238,7 +259,7 @@ function messagesMarkup(state: GameState): string {
     <div class="message-log">
       ${state.messages
         .slice(-3)
-        .map((message) => `<div class="message-line">${escapeHtml(message.text)}</div>`)
+        .map((message) => `<div class="message-line ${messageToneClass(message.text)}">${escapeHtml(message.text)}</div>`)
         .join("")}
     </div>
   `;
@@ -269,6 +290,7 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
   const carried = primary.worker?.carrying ? `<span><strong>Carrying:</strong> ${primary.worker.carrying.amount} ${label(primary.worker.carrying.type)}</span>` : "";
   const task = primary.worker?.task ? `<span><strong>Task:</strong> ${primary.worker.task.kind}</span>` : "";
   const storage = primary.storage ? `<span><strong>Stores:</strong> ${primary.storage.accepts.map(label).join(", ")}</span>` : "";
+  const populationCap = primary.building && buildingConfigs[primary.building.type].providesPopulation ? `<span><strong>Population:</strong> +${buildingConfigs[primary.building.type].providesPopulation}</span>` : "";
   const resource = primary.resourceNode ? `<span><strong>Contains:</strong> ${Math.max(0, Math.ceil(primary.resourceNode.amount))} ${label(primary.resourceNode.resourceType)}</span>` : "";
   const ownerAge = primary.ownerId ? state.players[primary.ownerId]?.age : undefined;
   const wall = primary.building?.type === "wall" && ownerAge ? `<span><strong>Tier:</strong> ${wallTierForAge(ownerAge).label}</span>` : "";
@@ -276,7 +298,7 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
     ? `<span><strong>Queue:</strong> ${unitConfigs[primary.producer.queue[0].unitType].label} ${Math.round((1 - primary.producer.queue[0].remainingTicks / primary.producer.queue[0].totalTicks) * 100)}%</span>`
     : "";
 
-  return `${health}${build}${wall}${farm}${storage}${carried}${task}${resource}${queue}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
+  return `${health}${build}${wall}${farm}${storage}${populationCap}${carried}${task}${resource}${queue}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
 }
 
 function selectionHelp(primary: GameEntity | undefined, state: GameState): string {
@@ -285,6 +307,9 @@ function selectionHelp(primary: GameEntity | undefined, state: GameState): strin
   }
   if (primary.worker) {
     return "<span>Villagers gather, build, and deposit at the nearest valid camp.</span>";
+  }
+  if (primary.building && buildingConfigs[primary.building.type].providesPopulation) {
+    return `<span>This building increases max population by ${buildingConfigs[primary.building.type].providesPopulation} when completed.</span>`;
   }
   if (primary.building?.type === "townCenter") {
     const player = state.players[PLAYER_ID];
@@ -346,4 +371,63 @@ function escapeHtml(value: string): string {
         return char;
     }
   });
+}
+
+function queuedPopulationForPlayer(state: GameState): number {
+  return Object.values(state.entities).reduce((total, entity) => {
+    if (entity.ownerId !== PLAYER_ID || !entity.producer) {
+      return total;
+    }
+    return total + entity.producer.queue.reduce((queueTotal, item) => queueTotal + unitConfigs[item.unitType].population, 0);
+  }, 0);
+}
+
+function populationStatus(state: GameState): {
+  cap: number;
+  used: number;
+  queued: number;
+  usedWithQueue: number;
+  blocked: boolean;
+  nearCap: boolean;
+  pillClass: string;
+  banner: string;
+  buildHint: string;
+} {
+  const player = state.players[PLAYER_ID];
+  const queued = queuedPopulationForPlayer(state);
+  const used = player.population;
+  const usedWithQueue = used + queued;
+  const cap = player.populationCap;
+  const blocked = usedWithQueue >= cap;
+  const nearCap = !blocked && cap - usedWithQueue <= 2;
+
+  return {
+    cap,
+    used,
+    queued,
+    usedWithQueue,
+    blocked,
+    nearCap,
+    pillClass: blocked ? "status-pill--danger" : nearCap ? "status-pill--warn" : "",
+    banner: blocked
+      ? `<div class="hud-alert hud-alert--danger">Population full. Build House to increase cap.</div>`
+      : nearCap
+        ? `<div class="hud-alert hud-alert--warn">Population almost full. Build House soon.</div>`
+        : "",
+    buildHint: blocked
+      ? `<div class="hud-inline-note hud-inline-note--danger">Population full. Build House to train more units.</div>`
+      : nearCap
+        ? `<div class="hud-inline-note">Only ${cap - usedWithQueue} population left.</div>`
+        : "",
+  };
+}
+
+function messageToneClass(text: string): string {
+  if (text.includes("Population cap reached")) {
+    return "message-line--danger";
+  }
+  if (text.includes("completed") || text.includes("Age advanced")) {
+    return "message-line--good";
+  }
+  return "";
 }

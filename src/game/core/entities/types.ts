@@ -46,6 +46,7 @@ export type WorkerTask =
   | {
       kind: "build";
       buildingId: EntityId;
+      approachTile?: TileCoord;
     };
 
 export type WorkerComponent = {

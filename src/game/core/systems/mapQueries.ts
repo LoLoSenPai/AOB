@@ -101,7 +101,7 @@ export function findNearestStorage(state: GameState, from: Vec2, resourceType: R
   return best;
 }
 
-export function findNearestFreeAdjacentTile(state: GameState, around: GameEntity): TileCoord | undefined {
+export function findFreeAdjacentTiles(state: GameState, around: GameEntity, from = around.position): TileCoord[] {
   const origin = around.tile ?? worldToTile(around.position);
   const footprint = around.building?.footprint ?? { w: 1, h: 1 };
   const candidates: TileCoord[] = [];
@@ -115,7 +115,13 @@ export function findNearestFreeAdjacentTile(state: GameState, around: GameEntity
     }
   }
 
-  return candidates.find((tile) => isTileWalkableForUnit(state, tile));
+  return candidates
+    .filter((tile) => isTileWalkableForUnit(state, tile))
+    .sort((a, b) => distance(tileCenter(a), from) - distance(tileCenter(b), from));
+}
+
+export function findNearestFreeAdjacentTile(state: GameState, around: GameEntity, from = around.position): TileCoord | undefined {
+  return findFreeAdjacentTiles(state, around, from)[0];
 }
 
 export function clampToMap(map: MapState, position: Vec2): Vec2 {

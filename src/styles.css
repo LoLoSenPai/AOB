@@ -75,6 +75,17 @@ canvas {
   white-space: nowrap;
 }
 
+.status-pill--warn {
+  border-color: rgba(229, 180, 82, 0.9);
+  background: rgba(74, 46, 17, 0.82);
+}
+
+.status-pill--danger {
+  border-color: rgba(216, 106, 84, 0.95);
+  background: rgba(90, 28, 24, 0.86);
+  color: #ffe0d8;
+}
+
 .resource-pill strong {
   color: #fff2bf;
 }
@@ -118,6 +129,29 @@ canvas {
   border: 2px solid var(--hud-border);
   box-shadow: 0 6px 0 rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 226, 153, 0.16);
   pointer-events: auto;
+}
+
+.hud-alert {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 12px;
+  background: rgba(32, 22, 18, 0.94);
+  border: 1px solid rgba(229, 180, 82, 0.55);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.hud-alert--warn {
+  border-color: rgba(229, 180, 82, 0.85);
+  color: #ffe0a0;
+}
+
+.hud-alert--danger {
+  border-color: rgba(216, 106, 84, 0.95);
+  color: #ffd7cf;
 }
 
 .hud-panel-title {
@@ -172,6 +206,20 @@ canvas {
   color: #ffe0a0;
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.hud-inline-note {
+  padding: 7px 9px;
+  background: rgba(38, 27, 18, 0.82);
+  border-left: 3px solid var(--hud-accent);
+  color: #f0d5a2;
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.hud-inline-note--danger {
+  border-left-color: var(--hud-bad);
+  color: #ffd7cf;
 }
 
 .command-grid {
@@ -252,6 +300,17 @@ canvas {
   filter: grayscale(0.5) brightness(0.7);
 }
 
+.command-button--suggested {
+  border-color: rgba(130, 198, 92, 0.9);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(130, 198, 92, 0.2);
+}
+
+.command-button--blocked:disabled {
+  border-color: rgba(216, 106, 84, 0.8);
+  color: #c89a92;
+  filter: grayscale(0.2) brightness(0.78);
+}
+
 .message-log {
   position: absolute;
   left: 14px;
@@ -267,6 +326,16 @@ canvas {
   padding: 5px 8px;
   background: rgba(36, 25, 19, 0.75);
   border-left: 3px solid var(--hud-accent);
+}
+
+.message-line--danger {
+  border-left-color: var(--hud-bad);
+  background: rgba(58, 25, 23, 0.82);
+}
+
+.message-line--good {
+  border-left-color: var(--hud-good);
+  background: rgba(28, 43, 24, 0.8);
 }
 
 @media (max-width: 980px) {

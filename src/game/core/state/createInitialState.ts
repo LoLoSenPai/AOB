@@ -60,12 +60,8 @@ export function addMessage(state: GameState, text: string): void {
 function createMap(): MapState {
   const width = 128;
   const height = 128;
-  const tiles: TileType[] = Array.from({ length: width * height }, (_, index) => {
-    const x = index % width;
-    const y = Math.floor(index / width);
-    const noise = (x * 17 + y * 31 + Math.floor(x / 7) * 13) % 17;
-    return noise === 0 ? "grassDark" : "grass";
-  });
+  const terrainChunkSize = 8;
+  const tiles: TileType[] = Array.from({ length: width * height }, () => "grass");
 
   function setTile(x: number, y: number, tile: TileType): void {
     if (x >= 0 && y >= 0 && x < width && y < height) {
@@ -73,31 +69,68 @@ function createMap(): MapState {
     }
   }
 
-  function fillEllipse(cx: number, cy: number, rx: number, ry: number, tile: TileType): void {
-    for (let y = cy - ry; y <= cy + ry; y += 1) {
-      for (let x = cx - rx; x <= cx + rx; x += 1) {
-        const dx = (x - cx) / rx;
-        const dy = (y - cy) / ry;
-        if (dx * dx + dy * dy <= 1) {
-          setTile(x, y, tile);
-        }
+  function fillChunk(cx: number, cy: number, tile: TileType): void {
+    for (let y = cy * terrainChunkSize; y < (cy + 1) * terrainChunkSize; y += 1) {
+      for (let x = cx * terrainChunkSize; x < (cx + 1) * terrainChunkSize; x += 1) {
+        setTile(x, y, tile);
       }
     }
   }
 
-  fillEllipse(58, 58, 20, 15, "grass");
-  fillEllipse(34, 45, 14, 10, "grass");
-  fillEllipse(92, 47, 15, 11, "grass");
-  fillEllipse(84, 80, 18, 11, "grass");
-  fillEllipse(37, 82, 15, 10, "grass");
+  function setChunkShape(chunks: Array<readonly [number, number]>, tile: TileType): void {
+    for (const [cx, cy] of chunks) {
+      fillChunk(cx, cy, tile);
+    }
+  }
 
-  fillEllipse(89, 45, 14, 11, "stoneGround");
-  fillEllipse(82, 80, 10, 8, "stoneGround");
-  fillEllipse(103, 64, 14, 13, "crystalGround");
+  // South-west lake. Keep the whole corner in shallow water so the shoreline reads cleanly.
+  setChunkShape(
+    [
+      [0, 9], [1, 9], [2, 9],
+      [0, 10], [1, 10], [2, 10], [3, 10],
+      [0, 11], [1, 11], [2, 11], [3, 11],
+      [0, 12], [1, 12], [2, 12], [3, 12], [4, 12],
+      [0, 13], [1, 13], [2, 13], [3, 13], [4, 13],
+      [0, 14], [1, 14], [2, 14], [3, 14],
+      [0, 15], [1, 15], [2, 15],
+    ],
+    "water",
+  );
 
-  fillEllipse(17, 101, 20, 17, "water");
-  fillEllipse(7, 113, 12, 16, "deepWater");
-  fillEllipse(109, 23, 7, 14, "water");
+  // North-east stone quarry: grass plateau at the top, dirt excavation below, rocky core inside.
+  setChunkShape(
+    [
+      [10, 2], [11, 2], [12, 2],
+      [9, 3], [10, 3], [11, 3], [12, 3], [13, 3],
+      [9, 4], [10, 4], [11, 4], [12, 4], [13, 4],
+      [9, 5], [10, 5], [11, 5], [12, 5], [13, 5],
+      [10, 6], [11, 6], [12, 6], [13, 6],
+      [10, 7], [11, 7], [12, 7],
+    ],
+    "dirt",
+  );
+
+  setChunkShape(
+    [
+      [10, 3], [11, 3], [12, 3],
+      [10, 4], [11, 4], [12, 4],
+      [10, 5], [11, 5], [12, 5],
+      [11, 6],
+    ],
+    "stoneGround",
+  );
+
+  // South-east crystal field, kept separate from the quarry by a full grass band.
+  setChunkShape(
+    [
+      [13, 10], [14, 10],
+      [13, 11], [14, 11], [15, 11],
+      [13, 12], [14, 12], [15, 12],
+      [14, 13], [15, 13],
+      [14, 14], [15, 14],
+    ],
+    "crystalGround",
+  );
 
   return {
     width,
@@ -108,19 +141,19 @@ function createMap(): MapState {
 }
 
 function seedVillage(state: GameState): void {
-  const townCenter = createBuilding(state, "townCenter", PLAYER_ID, { x: 55, y: 55 }, true);
+  const townCenter = createBuilding(state, "townCenter", PLAYER_ID, { x: 58, y: 58 }, true);
   state.entities[townCenter.id] = townCenter;
 
-  const house = createBuilding(state, "house", PLAYER_ID, { x: 48, y: 55 }, true);
+  const house = createBuilding(state, "house", PLAYER_ID, { x: 49, y: 58 }, true);
   state.entities[house.id] = house;
 
   const starts = [
-    { x: 55, y: 63 },
-    { x: 58, y: 64 },
-    { x: 61, y: 63 },
-    { x: 53, y: 51 },
-    { x: 64, y: 52 },
-    { x: 50, y: 64 },
+    { x: 57, y: 66 },
+    { x: 60, y: 67 },
+    { x: 63, y: 66 },
+    { x: 55, y: 54 },
+    { x: 66, y: 55 },
+    { x: 52, y: 67 },
   ];
 
   for (const position of starts) {
@@ -134,26 +167,12 @@ function seedVillage(state: GameState): void {
 
 function seedResources(state: GameState): void {
   const treeTiles = [
-    [26, 32],
-    [29, 31],
-    [32, 33],
-    [24, 36],
-    [28, 37],
-    [33, 38],
-    [37, 35],
-    [23, 42],
-    [28, 44],
-    [34, 44],
-    [39, 42],
-    [17, 51],
-    [22, 55],
-    [28, 55],
-    [34, 53],
-    [39, 57],
-    [75, 32],
-    [79, 30],
-    [83, 34],
-    [88, 36],
+    [14, 18], [19, 17], [24, 19], [29, 20], [34, 22],
+    [12, 24], [17, 25], [22, 27], [27, 28], [32, 30], [37, 31],
+    [10, 31], [15, 33], [20, 34], [25, 36], [30, 37], [35, 39],
+    [13, 40], [18, 42], [23, 44], [28, 45], [33, 47], [38, 48],
+    [16, 50], [21, 52], [26, 54], [31, 56],
+    [18, 66], [24, 69], [30, 72], [36, 76],
   ];
 
   for (const [x, y] of treeTiles) {
@@ -162,39 +181,44 @@ function seedResources(state: GameState): void {
   }
 
   for (const [x, y] of [
-    [82, 38],
-    [86, 39],
-    [91, 42],
-    [96, 44],
-    [88, 52],
-    [93, 54],
-    [78, 76],
-    [84, 83],
+    [95, 40],
+    [100, 42],
+    [106, 44],
+    [111, 47],
+    [97, 51],
+    [103, 54],
+    [109, 56],
+    [114, 59],
+    [101, 62],
+    [107, 65],
   ]) {
     const stone = createResourceNode(state, "stone", { x, y });
     state.entities[stone.id] = stone;
   }
 
   for (const [x, y] of [
-    [100, 55],
-    [105, 58],
-    [109, 64],
-    [97, 71],
-    [103, 75],
+    [112, 73],
+    [118, 76],
+    [122, 80],
+    [111, 87],
+    [118, 91],
+    [123, 95],
+    [114, 101],
+    [120, 104],
   ]) {
     const gold = createResourceNode(state, "gold", { x, y });
     state.entities[gold.id] = gold;
   }
 
   for (const [x, y] of [
-    [65, 50],
-    [68, 51],
-    [72, 53],
-    [70, 65],
-    [74, 66],
-    [49, 69],
-    [52, 70],
-    [35, 75],
+    [48, 52],
+    [53, 55],
+    [67, 52],
+    [71, 56],
+    [46, 82],
+    [52, 86],
+    [60, 92],
+    [66, 96],
   ]) {
     const berries = createResourceNode(state, "berries", { x, y });
     state.entities[berries.id] = berries;

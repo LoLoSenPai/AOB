@@ -33,6 +33,20 @@ function runMovementSystem(state: GameState): void {
       continue;
     }
 
+    if (entity.mobile.target && entity.mobile.path.length === 0) {
+      const currentTile = worldToTile(entity.position);
+      const targetTile = worldToTile(entity.mobile.target);
+      const sameTile = currentTile.x === targetTile.x && currentTile.y === targetTile.y;
+      if (!sameTile) {
+        const reroute = findPath(state, entity.position, entity.mobile.target);
+        if (reroute.length > 0) {
+          entity.mobile.path = reroute;
+        } else {
+          delete entity.mobile.target;
+        }
+      }
+    }
+
     const waypoint = entity.mobile.path[0] ?? entity.mobile.target;
     if (!waypoint) {
       if (entity.visualState === "walking") {
@@ -49,6 +63,16 @@ function runMovementSystem(state: GameState): void {
       entity.position = { ...waypoint };
       if (entity.mobile.path.length > 0) {
         entity.mobile.path.shift();
+        if (entity.mobile.path.length === 0 && entity.mobile.target) {
+          const currentTile = worldToTile(entity.position);
+          const targetTile = worldToTile(entity.mobile.target);
+          const reachedGoalTile = currentTile.x === targetTile.x && currentTile.y === targetTile.y;
+          const blockedGoalTile = !isTileWalkableForUnit(state, targetTile, entity.id);
+          const closeEnough = distance(entity.position, entity.mobile.target) <= step;
+          if (reachedGoalTile || blockedGoalTile || closeEnough) {
+            delete entity.mobile.target;
+          }
+        }
       } else {
         delete entity.mobile.target;
       }
@@ -237,8 +261,13 @@ function runConstructionSystem(state: GameState): void {
 
     if (distance(worker.position, building.position) > worker.radius + building.radius + 6) {
       if (worker.mobile && (!worker.mobile.target || worker.mobile.path.length === 0)) {
-        worker.mobile.target = building.position;
-        worker.mobile.path = findPath(state, worker.position, building.position);
+        const approachTile = task.approachTile ?? findNearestFreeAdjacentTile(state, building, worker.position);
+        if (approachTile) {
+          task.approachTile = approachTile;
+        }
+        const target = approachTile ? tileCenter(approachTile) : building.position;
+        worker.mobile.target = target;
+        worker.mobile.path = findPath(state, worker.position, target);
       }
       continue;
     }
@@ -265,6 +294,10 @@ function runConstructionSystem(state: GameState): void {
       for (const worker of builders) {
         if (worker.worker?.task?.kind === "build" && worker.worker.task.buildingId === building.id) {
           delete worker.worker.task;
+          if (worker.mobile) {
+            delete worker.mobile.target;
+            worker.mobile.path = [];
+          }
           worker.visualState = "idle";
         }
       }
