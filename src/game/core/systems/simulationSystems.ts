@@ -1,4 +1,4 @@
-import { ENEMY_ID, PLAYER_ID } from "../../data/constants";
+import { ENEMY_ID, PLAYER_ID, TILE_SIZE } from "../../data/constants";
 import { ageConfigs, buildingConfigs, maxHealthForBuilding, resourceConfigs, unitConfigs } from "../../data/definitions";
 import type { EntityId, GameEntity } from "../entities/types";
 import { createUnit } from "../state/entityFactory";
@@ -6,6 +6,7 @@ import { addMessage } from "../state/createInitialState";
 import type { GameState, TileCoord } from "../state/types";
 import {
   distance,
+  findFreeAdjacentTiles,
   findNearestFreeAdjacentTile,
   findNearestStorage,
   isRectBuildable,
@@ -14,6 +15,7 @@ import {
   worldToTile,
 } from "./mapQueries";
 import { findPath } from "./pathfinding";
+import { wallLineSegments } from "./wallPlacement";
 
 export function runSimulationSystems(state: GameState): void {
   runAiSystem(state);
@@ -259,15 +261,23 @@ function runConstructionSystem(state: GameState): void {
       continue;
     }
 
-    if (distance(worker.position, building.position) > worker.radius + building.radius + 6) {
+    if (!isWorkerInConstructionRange(worker, building, task.approachTile)) {
       if (worker.mobile && (!worker.mobile.target || worker.mobile.path.length === 0)) {
-        const approachTile = task.approachTile ?? findNearestFreeAdjacentTile(state, building, worker.position);
+        const approachTile =
+          task.approachTile && isReachableConstructionTile(state, worker.position, task.approachTile)
+            ? task.approachTile
+            : findReachableConstructionTile(state, building, worker.position);
+        if (!approachTile) {
+          delete workerComponent.task;
+          worker.visualState = "idle";
+          continue;
+        }
         if (approachTile) {
           task.approachTile = approachTile;
         }
         const target = approachTile ? tileCenter(approachTile) : building.position;
         worker.mobile.target = target;
-        worker.mobile.path = findPath(state, worker.position, target);
+        worker.mobile.path = pathToReachableTile(state, worker.position, approachTile) ?? [];
       }
       continue;
     }
@@ -293,6 +303,9 @@ function runConstructionSystem(state: GameState): void {
       completeBuilding(state, building);
       for (const worker of builders) {
         if (worker.worker?.task?.kind === "build" && worker.worker.task.buildingId === building.id) {
+          if (building.building.type === "wall" && assignWorkerToNextWallConstruction(state, worker, building)) {
+            continue;
+          }
           delete worker.worker.task;
           if (worker.mobile) {
             delete worker.mobile.target;
@@ -303,6 +316,77 @@ function runConstructionSystem(state: GameState): void {
       }
     }
   }
+}
+
+function isWorkerInConstructionRange(worker: GameEntity, building: GameEntity, approachTile: TileCoord | undefined): boolean {
+  if (approachTile && distance(worker.position, tileCenter(approachTile)) <= TILE_SIZE * 0.55) {
+    return true;
+  }
+  return distance(worker.position, building.position) <= worker.radius + building.radius + 6;
+}
+
+function assignWorkerToNextWallConstruction(state: GameState, worker: GameEntity, completedWall: GameEntity): boolean {
+  const candidates = Object.values(state.entities)
+    .filter(
+      (entity) =>
+        entity.id !== completedWall.id &&
+        entity.ownerId === completedWall.ownerId &&
+        entity.building?.type === "wall" &&
+        !entity.building.completed,
+    )
+    .sort((a, b) => distance(worker.position, a.position) - distance(worker.position, b.position));
+
+  for (const candidate of candidates) {
+    if (assignWorkerToConstructionTarget(state, worker, candidate)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function assignWorkerToConstructionTarget(state: GameState, worker: GameEntity, building: GameEntity): boolean {
+  if (!worker.worker || !worker.mobile || !building.building || building.building.completed) {
+    return false;
+  }
+
+  const approachTile = findReachableConstructionTile(state, building, worker.position);
+  if (!approachTile) {
+    return false;
+  }
+
+  const path = pathToReachableTile(state, worker.position, approachTile);
+  if (!path) {
+    return false;
+  }
+
+  worker.worker.task = {
+    kind: "build",
+    buildingId: building.id,
+    approachTile,
+  };
+  worker.mobile.target = tileCenter(approachTile);
+  worker.mobile.path = path;
+  worker.visualState = "walking";
+  return true;
+}
+
+function findReachableConstructionTile(state: GameState, building: GameEntity, from: { x: number; y: number }): TileCoord | undefined {
+  return findFreeAdjacentTiles(state, building, from).find((tile) => isReachableConstructionTile(state, from, tile));
+}
+
+function isReachableConstructionTile(state: GameState, from: { x: number; y: number }, tile: TileCoord): boolean {
+  return pathToReachableTile(state, from, tile) !== undefined;
+}
+
+function pathToReachableTile(state: GameState, from: { x: number; y: number }, tile: TileCoord): { x: number; y: number }[] | undefined {
+  const currentTile = worldToTile(from);
+  if (currentTile.x === tile.x && currentTile.y === tile.y) {
+    return [];
+  }
+
+  const path = findPath(state, from, tileCenter(tile));
+  return path.length > 0 ? path : undefined;
 }
 
 function runProductionSystem(state: GameState): void {
@@ -473,7 +557,7 @@ export function canPlaceBuildingAt(state: GameState, buildingType: keyof typeof 
 }
 
 export function canPlaceWallLineAt(state: GameState, start: TileCoord, end: TileCoord): boolean {
-  return wallLineTiles(start, end).every((tile) => isRectBuildable(state, tile, buildingConfigs.wall.footprint));
+  return wallLineSegments(start, end).every((segment) => isRectBuildable(state, segment.tile, segment.footprint));
 }
 
 export function buildingProgressRatio(entity: GameEntity): number {
@@ -499,16 +583,4 @@ export function tileSpiral(center: TileCoord, radius: number): TileCoord[] {
     }
   }
   return tiles.sort((a, b) => Math.abs(a.x - center.x) + Math.abs(a.y - center.y) - (Math.abs(b.x - center.x) + Math.abs(b.y - center.y)));
-}
-
-export function wallLineTiles(start: TileCoord, end: TileCoord): TileCoord[] {
-  const horizontal = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y);
-  const fixed = horizontal ? start.y : start.x;
-  const from = horizontal ? Math.min(start.x, end.x) : Math.min(start.y, end.y);
-  const to = horizontal ? Math.max(start.x, end.x) : Math.max(start.y, end.y);
-  const tiles: TileCoord[] = [];
-  for (let value = from; value <= to; value += 1) {
-    tiles.push(horizontal ? { x: value, y: fixed } : { x: fixed, y: value });
-  }
-  return tiles;
 }

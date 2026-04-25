@@ -46,24 +46,6 @@ export function registerAnimations(scene: Phaser.Scene): void {
       repeat: meta.repeat,
     });
   }
-
-  create(scene, { key: "goblin-idle", textureKey: assetKeys.goblin.idle, frames: 8, frameRate: 5, repeat: -1 });
-  create(scene, { key: "goblin-walk", textureKey: assetKeys.goblin.walk, frames: 8, frameRate: 8, repeat: -1 });
-  create(scene, { key: "goblin-attack", textureKey: assetKeys.goblin.attack, frames: 9, frameRate: 10, repeat: -1 });
-  create(scene, { key: "goblin-hurt", textureKey: assetKeys.goblin.hurt, frames: 8, frameRate: 10, repeat: 0 });
-  create(scene, { key: "goblin-death", textureKey: assetKeys.goblin.death, frames: 9, frameRate: 8, repeat: 0 });
-
-  create(scene, { key: "skeleton-idle", textureKey: assetKeys.skeleton.idle, frames: 6, frameRate: 5, repeat: -1 });
-  create(scene, { key: "skeleton-walk", textureKey: assetKeys.skeleton.walk, frames: 8, frameRate: 8, repeat: -1 });
-  create(scene, { key: "skeleton-attack", textureKey: assetKeys.skeleton.attack, frames: 7, frameRate: 9, repeat: -1 });
-  create(scene, { key: "skeleton-hurt", textureKey: assetKeys.skeleton.hurt, frames: 7, frameRate: 10, repeat: 0 });
-  create(scene, { key: "skeleton-death", textureKey: assetKeys.skeleton.death, frames: 10, frameRate: 8, repeat: 0 });
-
-  create(scene, { key: "tree-1-sway", textureKey: assetKeys.elements.tree1, frames: 4, frameRate: 4, repeat: -1 });
-  create(scene, { key: "tree-2-sway", textureKey: assetKeys.elements.tree2, frames: 4, frameRate: 4, repeat: -1 });
-  create(scene, { key: "windmill-turn", textureKey: assetKeys.elements.windmill, frames: 9, frameRate: 6, repeat: -1 });
-  create(scene, { key: "fire-loop", textureKey: assetKeys.elements.fire, frames: 4, frameRate: 7, repeat: -1 });
-  create(scene, { key: "smoke-loop", textureKey: assetKeys.elements.smoke, frames: 30, frameRate: 10, repeat: -1 });
 }
 
 function create(scene: Phaser.Scene, config: SheetAnimation): void {

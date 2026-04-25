@@ -1,4 +1,4 @@
-import { PLAYER_ID, RESOURCE_TYPES, type ResourceType } from "../../data/constants";
+import { PLAYER_ID, RESOURCE_TYPES, type AgeId, type ResourceType } from "../../data/constants";
 import { ageConfigs, buildingConfigs, canAfford, costForBuilding, hasReachedAge, labelForBuilding, unitConfigs, wallTierForAge } from "../../data/definitions";
 import type { BuildingType, GameEntity, UnitType } from "../../core/entities/types";
 import type { GameState } from "../../core/state/types";
@@ -26,10 +26,66 @@ const BUILD_GROUPS: { label: string; buildings: BuildingType[] }[] = [
 ];
 
 const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
-  food: "/assets/aob-map/optimized/fruit-bush.png",
-  wood: "/assets/aob-map/optimized/wood-pile.png",
-  stone: "/assets/aob-map/optimized/rocks.png",
-  gold: "/assets/aob-map/optimized/crystal-node.png",
+  food: "/last-assets/runtime/icon-food.png",
+  wood: "/last-assets/runtime/icon-wood.png",
+  stone: "/last-assets/runtime/icon-stone.png",
+  gold: "/last-assets/runtime/icon-gold.png",
+};
+
+const POPULATION_ICON_PATH = "/last-assets/runtime/icon-population.png";
+const WALL_ICON_PATH = "/last-assets/runtime/wall-palisade-horizontal.png?v=20260424-225617";
+
+const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> = {
+  townCenter: {
+    genesis: "/last-assets/hdv-t1.png",
+    settlement: "/last-assets/hdv-t2.png",
+    network: "/last-assets/hdv-t3.png",
+  },
+  house: {
+    genesis: "/assets/aob-buildings/static-runtime/house-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/house-t2.png",
+    network: "/assets/aob-buildings/static-runtime/house-t3.png",
+  },
+  farm: {
+    genesis: "/assets/aob-buildings/static-runtime/farm-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/farm-t2.png",
+    network: "/assets/aob-buildings/static-runtime/farm-t3.png",
+  },
+  mill: {
+    genesis: "/assets/aob-buildings/static-runtime/mill-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/mill-t2.png",
+    network: "/assets/aob-buildings/static-runtime/mill-t3.png",
+  },
+  lumberCamp: {
+    genesis: "/assets/aob-buildings/static-runtime/lumber-camp-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/lumber-camp-t2.png",
+    network: "/assets/aob-buildings/static-runtime/lumber-camp-t3.png",
+  },
+  stoneCamp: {
+    genesis: "/assets/aob-buildings/static-runtime/stone-camp-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/stone-camp-t2.png",
+    network: "/assets/aob-buildings/static-runtime/stone-camp-t3.png",
+  },
+  goldCamp: {
+    genesis: "/assets/aob-buildings/static-runtime/gold-camp-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/gold-camp-t2.png",
+    network: "/assets/aob-buildings/static-runtime/gold-camp-t3.png",
+  },
+  barracks: {
+    genesis: "/assets/aob-buildings/static-runtime/barracks-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/barracks-t2.png",
+    network: "/assets/aob-buildings/static-runtime/barracks-t3.png",
+  },
+  watchTower: {
+    genesis: "/assets/aob-buildings/static-runtime/watch-tower-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/watch-tower-t2.png",
+    network: "/assets/aob-buildings/static-runtime/watch-tower-t3.png",
+  },
+  wall: {
+    genesis: WALL_ICON_PATH,
+    settlement: WALL_ICON_PATH,
+    network: WALL_ICON_PATH,
+  },
 };
 
 export class HudController {
@@ -69,9 +125,18 @@ export class HudController {
 
     return `
       <div class="hud-topbar">
+        <div class="hud-brand">
+          <span class="hud-crest">AOB</span>
+          <span class="hud-title">Age of Blockchains</span>
+        </div>
         <div class="resource-strip">${resourceMarkup}</div>
-        ${ageProgress}
-        <span class="status-pill ${population.pillClass}">Pop ${player.population}/${player.populationCap}${queuedPopulation > 0 ? ` (+${queuedPopulation} queued)` : ""}</span>
+        <div class="status-strip">
+          ${ageProgress}
+          <span class="status-pill ${population.pillClass}">
+            <img class="resource-icon-img" src="${POPULATION_ICON_PATH}" alt="">
+            <strong>${player.population}/${player.populationCap}</strong>${queuedPopulation > 0 ? `<span class="queued-pop">+${queuedPopulation}</span>` : ""}
+          </span>
+        </div>
       </div>
       ${population.banner}
       ${primary ? panelMarkup(primary, selected, state) : ""}
@@ -124,7 +189,7 @@ function resourcePill(type: ResourceType, value: number): string {
   return `
     <span class="resource-pill">
       <img class="resource-icon-img" src="${RESOURCE_ICON_PATHS[type]}" alt="">
-      <span>${label(type)}</span>
+      <span class="resource-label">${label(type)}</span>
       <strong>${Math.floor(value)}</strong>
     </span>
   `;
@@ -133,12 +198,19 @@ function resourcePill(type: ResourceType, value: number): string {
 function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], state: GameState): string {
   const title = panelTitle(primary, selected);
   const details = primary ? detailsFor(primary, selected, state) : "No selection";
+  const meta = primary ? panelMeta(primary, selected, state) : "";
   return `
     <div class="hud-bottom-panel">
-      <div class="hud-panel-title">${title}</div>
+      <div class="hud-panel-header">
+        ${selectionPortrait(primary, selected, state)}
+        <div class="hud-panel-heading">
+          <div class="hud-panel-title">${title}</div>
+          ${meta}
+        </div>
+      </div>
       <div class="hud-panel-grid">
         <div class="hud-info-list">${details}</div>
-        <div class="hud-info-list">${selectionHelp(primary, state)}</div>
+        <div class="hud-info-list hud-info-help">${selectionHelp(primary, state)}</div>
       </div>
     </div>
   `;
@@ -231,7 +303,9 @@ function buildButton(state: GameState, type: BuildingType): string {
         ? undefined
         : "Need res.";
   const body = subtitle ? `<span class="lock-label">${subtitle}</span>` : costLabel(cost);
-  return `<button class="command-button ${suggested ? "command-button--suggested" : ""}" data-build="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${labelText}</span>${body}</button>`;
+  const iconPath = buildingIconPath(type, player.age);
+  const icon = iconPath ? `<img class="command-icon" src="${iconPath}" alt="">` : "";
+  return `<button class="command-button ${suggested ? "command-button--suggested" : ""}" data-build="${type}" ${disabled ? "disabled" : ""}>${icon}<span class="command-title">${labelText}</span>${body}</button>`;
 }
 
 function producerButtons(entity: GameEntity, state: GameState): string {
@@ -273,6 +347,58 @@ function panelTitle(primary: GameEntity | undefined, selected: GameEntity[]): st
     return `${selected.length} selected`;
   }
   return primary.label;
+}
+
+function selectionPortrait(primary: GameEntity | undefined, selected: GameEntity[], state: GameState): string {
+  if (!primary) {
+    return "";
+  }
+  if (selected.length > 1) {
+    return `<div class="selection-portrait selection-portrait--group"><span>${selected.length}</span></div>`;
+  }
+  const image = portraitPath(primary, state);
+  if (image) {
+    return `<div class="selection-portrait"><img src="${image}" alt=""></div>`;
+  }
+  const glyph = primary.unit?.type === "soldier" ? "I" : primary.worker ? "V" : "?";
+  return `<div class="selection-portrait selection-portrait--glyph"><span>${glyph}</span></div>`;
+}
+
+function portraitPath(entity: GameEntity, state: GameState): string | undefined {
+  if (entity.resourceNode) {
+    return RESOURCE_ICON_PATHS[entity.resourceNode.resourceType];
+  }
+  if (entity.farm) {
+    return RESOURCE_ICON_PATHS.food;
+  }
+  if (entity.building) {
+    const ownerAge = entity.ownerId ? state.players[entity.ownerId]?.age : state.players[PLAYER_ID].age;
+    return buildingIconPath(entity.building.type, ownerAge ?? state.players[PLAYER_ID].age);
+  }
+  return undefined;
+}
+
+function panelMeta(primary: GameEntity, selected: GameEntity[], state: GameState): string {
+  if (selected.length > 1) {
+    const workers = selected.filter((entity) => entity.worker).length;
+    const buildings = selected.filter((entity) => entity.building).length;
+    return `<div class="hud-panel-meta">${workers} villagers${buildings > 0 ? `, ${buildings} buildings` : ""}</div>`;
+  }
+
+  const health = primary.health ? healthBarMarkup(primary.health.current, primary.health.max) : "";
+  const ownerAge = primary.ownerId ? state.players[primary.ownerId]?.age : undefined;
+  const type = primary.building ? labelForBuilding(primary.building.type, ownerAge ?? state.players[PLAYER_ID].age) : primary.unit ? unitConfigs[primary.unit.type].label : primary.resourceNode ? label(primary.resourceNode.resourceType) : primary.kind;
+  return `<div class="hud-panel-meta">${type}</div>${health}`;
+}
+
+function healthBarMarkup(current: number, max: number): string {
+  const ratio = Math.round((Math.max(0, Math.min(current, max)) / Math.max(1, max)) * 100);
+  return `
+    <div class="hud-healthbar">
+      <span style="width:${ratio}%"></span>
+      <strong>${Math.ceil(current)} / ${max}</strong>
+    </div>
+  `;
 }
 
 function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameState): string {
@@ -335,6 +461,10 @@ function costLabel(cost: Partial<Record<ResourceType, number>>): string {
     (type) => `<span class="cost-item"><img class="cost-icon" src="${RESOURCE_ICON_PATHS[type]}" alt="">${cost[type]}</span>`,
   );
   return parts.length > 0 ? `<span class="cost-list">${parts.join("")}</span>` : `<span class="free-cost">Free</span>`;
+}
+
+function buildingIconPath(type: BuildingType, age: AgeId): string | undefined {
+  return BUILDING_ICON_PATHS[type]?.[age] ?? BUILDING_ICON_PATHS[type]?.genesis;
 }
 
 function shortLabel(value: string): string {

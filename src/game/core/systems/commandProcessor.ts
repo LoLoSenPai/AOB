@@ -1,4 +1,4 @@
-import { PLAYER_ID, type PlayerId, type ResourceType } from "../../data/constants";
+import { PLAYER_ID, TILE_SIZE, type PlayerId, type ResourceType } from "../../data/constants";
 import {
   ageConfigs,
   applyCost,
@@ -12,11 +12,13 @@ import {
 } from "../../data/definitions";
 import type { GameCommand } from "../commands/types";
 import type { EntityId, GameEntity } from "../entities/types";
-import { createBuilding } from "../state/entityFactory";
+import { createBuilding, worldFromTile } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
 import type { GameState, TileCoord, Vec2 } from "../state/types";
-import { clampToMap, findFreeAdjacentTiles, findNearestFreeAdjacentTile, isRectBuildable, tileCenter } from "./mapQueries";
+import { clampToMap, distance, findFreeAdjacentTiles, findNearestFreeAdjacentTile, isRectBuildable, tileCenter, worldToTile } from "./mapQueries";
+import { stampBuildingGround } from "./mapEditing";
 import { findPath } from "./pathfinding";
+import { wallLineSegments } from "./wallPlacement";
 
 export function applyCommand(state: GameState, command: GameCommand): void {
   switch (command.type) {
@@ -167,6 +169,9 @@ function applyBuildStructure(
   const completed = config.buildTicks <= 1;
   const building = createBuilding(state, buildingType, playerId, tile, completed);
   state.entities[building.id] = building;
+  if (buildingType !== "wall" && building.building) {
+    stampBuildingGround(state.map, tile, building.building.footprint);
+  }
 
   assignBuildersToConstruction(state, playerId, building, builderIds);
 
@@ -191,21 +196,9 @@ function assignBuildersToConstruction(state: GameState, playerId: PlayerId, buil
 
   for (const id of builderIds) {
     const builder = state.entities[id];
-    if (!builder?.worker || !builder.mobile || builder.ownerId !== playerId) {
-      continue;
+    if (builder && assignBuilderToConstruction(state, playerId, builder, building, reservedTiles)) {
+      assignedCount += 1;
     }
-    const approachTile = findAvailableConstructionTile(state, building, builder.position, reservedTiles);
-    const target = approachTile ? tileCenter(approachTile) : building.position;
-    builder.worker.task = {
-      kind: "build",
-      buildingId: building.id,
-      approachTile,
-    };
-    delete builder.worker.carrying;
-    builder.mobile.target = target;
-    builder.mobile.path = findPath(state, builder.position, target);
-    builder.visualState = "walking";
-    assignedCount += 1;
   }
 
   return assignedCount;
@@ -214,20 +207,20 @@ function assignBuildersToConstruction(state: GameState, playerId: PlayerId, buil
 function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoord, end: TileCoord, builderIds: EntityId[]): void {
   const player = state.players[playerId];
   const config = buildingConfigs.wall;
-  const tiles = wallLineTiles(start, end);
+  const segments = wallLineSegments(start, end);
   if (!player || !hasReachedAge(player.age, config.unlockedAge)) {
     addMessage(state, "Walls are not unlocked yet.");
     return;
   }
-  if (tiles.length === 0) {
+  if (segments.length === 0) {
     return;
   }
-  if (!tiles.every((tile) => isRectBuildable(state, tile, config.footprint))) {
+  if (!segments.every((segment) => isRectBuildable(state, segment.tile, segment.footprint))) {
     addMessage(state, "Cannot build wall there.");
     return;
   }
 
-  const totalCost = multiplyCost(costForBuilding("wall", player.age), tiles.length);
+  const totalCost = multiplyCost(costForBuilding("wall", player.age), segments.length);
   if (!canAfford(player.resources, totalCost)) {
     addMessage(state, "Not enough resources.");
     return;
@@ -235,32 +228,40 @@ function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoo
 
   player.resources = applyCost(player.resources, totalCost, -1);
   const wallIds: EntityId[] = [];
-  for (const tile of tiles) {
-    const wall = createBuilding(state, "wall", playerId, tile, false);
+  for (const segment of segments) {
+    const wall = createBuilding(state, "wall", playerId, segment.tile, false);
+    if (wall.building) {
+      wall.building.footprint = { ...segment.footprint };
+      wall.position = worldFromTile(segment.tile, segment.footprint);
+      wall.radius = Math.max(segment.footprint.w, segment.footprint.h) * TILE_SIZE * 0.5;
+    }
     state.entities[wall.id] = wall;
     wallIds.push(wall.id);
   }
 
-  builderIds.forEach((id, index) => {
+  const wallEntities = wallIds.map((id) => state.entities[id]).filter((entity): entity is GameEntity => Boolean(entity));
+  const assignedWallIds = new Set<EntityId>();
+  const reservedTiles = new Set<string>();
+  for (const id of builderIds) {
     const builder = state.entities[id];
-    const wallId = wallIds[index % wallIds.length];
-    const wall = wallId ? state.entities[wallId] : undefined;
-    if (!builder?.worker || !builder.mobile || !wall || builder.ownerId !== playerId) {
-      return;
+    if (!builder?.worker || !builder.mobile || builder.ownerId !== playerId) {
+      continue;
     }
-    builder.worker.task = {
-      kind: "build",
-      buildingId: wall.id,
-      approachTile: findNearestFreeAdjacentTile(state, wall, builder.position),
-    };
-    const approachTile = builder.worker.task.approachTile;
-    const target = approachTile ? tileCenter(approachTile) : wall.position;
-    builder.mobile.target = target;
-    builder.mobile.path = findPath(state, builder.position, target);
-    builder.visualState = "walking";
-  });
 
-  addMessage(state, `${tiles.length} ${labelForBuilding("wall", player.age).toLowerCase()} segment${tiles.length > 1 ? "s" : ""} placed.`);
+    const unassignedWalls = wallEntities.filter((wall) => !assignedWallIds.has(wall.id));
+    const candidates = (unassignedWalls.length > 0 ? unassignedWalls : wallEntities).sort(
+      (a, b) => distance(builder.position, a.position) - distance(builder.position, b.position),
+    );
+
+    for (const wall of candidates) {
+      if (assignBuilderToConstruction(state, playerId, builder, wall, reservedTiles)) {
+        assignedWallIds.add(wall.id);
+        break;
+      }
+    }
+  }
+
+  addMessage(state, `${segments.length} ${labelForBuilding("wall", player.age).toLowerCase()} segment${segments.length > 1 ? "s" : ""} placed.`);
 }
 
 function applyTrainUnit(state: GameState, playerId: PlayerId, buildingId: EntityId, unitType: keyof typeof unitConfigs): void {
@@ -341,18 +342,6 @@ function applyReseedFarm(state: GameState, playerId: PlayerId, farmId: EntityId)
   farm.farm.food = farm.farm.maxFood;
   farm.farm.depleted = false;
   addMessage(state, "Farm reseeded.");
-}
-
-function wallLineTiles(start: TileCoord, end: TileCoord): TileCoord[] {
-  const horizontal = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y);
-  const fixed = horizontal ? start.y : start.x;
-  const from = horizontal ? Math.min(start.x, end.x) : Math.min(start.y, end.y);
-  const to = horizontal ? Math.max(start.x, end.x) : Math.max(start.y, end.y);
-  const tiles: TileCoord[] = [];
-  for (let value = from; value <= to; value += 1) {
-    tiles.push(horizontal ? { x: value, y: fixed } : { x: fixed, y: value });
-  }
-  return tiles;
 }
 
 function multiplyCost(cost: Partial<Record<ResourceType, number>>, multiplier: number): Partial<Record<ResourceType, number>> {
@@ -436,12 +425,60 @@ function findAvailableConstructionTile(
   reservedTiles: Set<string>,
 ): TileCoord | undefined {
   const candidates = findFreeAdjacentTiles(state, building, from);
-  const available = candidates.find((tile) => !reservedTiles.has(tileKey(tile)));
-  const chosen = available ?? candidates[0];
+  const available = candidates.find((tile) => !reservedTiles.has(tileKey(tile)) && isReachableConstructionTile(state, from, tile));
+  const chosen = available ?? candidates.find((tile) => isReachableConstructionTile(state, from, tile));
   if (chosen) {
     reservedTiles.add(tileKey(chosen));
   }
   return chosen;
+}
+
+function assignBuilderToConstruction(
+  state: GameState,
+  playerId: PlayerId,
+  builder: GameEntity,
+  building: GameEntity,
+  reservedTiles: Set<string>,
+): boolean {
+  if (!builder.worker || !builder.mobile || builder.ownerId !== playerId || !building.building || building.building.completed) {
+    return false;
+  }
+
+  const approachTile = findAvailableConstructionTile(state, building, builder.position, reservedTiles);
+  if (!approachTile) {
+    return false;
+  }
+
+  const target = tileCenter(approachTile);
+  const path = pathToReachableTile(state, builder.position, approachTile);
+  if (!path) {
+    return false;
+  }
+
+  builder.worker.task = {
+    kind: "build",
+    buildingId: building.id,
+    approachTile,
+  };
+  delete builder.worker.carrying;
+  builder.mobile.target = target;
+  builder.mobile.path = path;
+  builder.visualState = "walking";
+  return true;
+}
+
+function isReachableConstructionTile(state: GameState, from: Vec2, tile: TileCoord): boolean {
+  return pathToReachableTile(state, from, tile) !== undefined;
+}
+
+function pathToReachableTile(state: GameState, from: Vec2, tile: TileCoord): Vec2[] | undefined {
+  const currentTile = worldToTile(from);
+  if (currentTile.x === tile.x && currentTile.y === tile.y) {
+    return [];
+  }
+
+  const path = findPath(state, from, tileCenter(tile));
+  return path.length > 0 ? path : undefined;
 }
 
 function tileKey(tile: TileCoord): string {

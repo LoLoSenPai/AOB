@@ -183,6 +183,13 @@ export const assetKeys = {
       network: "aob-building-static-watch-tower-t3",
     },
   },
+  aobWalls: {
+    palisadeHorizontal: "aob-wall-palisade-horizontal",
+    palisadeVertical: "aob-wall-palisade-vertical",
+    palisadeCornerLeft: "aob-wall-palisade-corner-left",
+    palisadeCornerRight: "aob-wall-palisade-corner-right",
+    palisadeGate: "aob-wall-palisade-gate",
+  },
   ui: {
     indicator: "ui-indicator",
   },

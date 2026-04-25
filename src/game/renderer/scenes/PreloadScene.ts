@@ -8,10 +8,9 @@ export class PreloadScene extends Phaser.Scene {
 
   preload(): void {
     this.loadHumanSheets();
-    this.loadEnemySheets();
     this.loadAobMapAssets();
-    this.loadAobBuildingAssets();
     this.loadAobBuildingStaticAssets();
+    this.loadAobWallAssets();
   }
 
   create(): void {
@@ -47,55 +46,11 @@ export class PreloadScene extends Phaser.Scene {
     }
   }
 
-  private loadEnemySheets(): void {
-    this.load.spritesheet(assetKeys.goblin.idle, "/assets/sunnyside/characters/goblin/spr_idle_strip9.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.goblin.walk, "/assets/sunnyside/characters/goblin/spr_walk_strip8.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.goblin.attack, "/assets/sunnyside/characters/goblin/spr_attack_strip10.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.goblin.hurt, "/assets/sunnyside/characters/goblin/spr_hurt_strip8.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.goblin.death, "/assets/sunnyside/characters/goblin/spr_death_strip13.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-
-    this.load.spritesheet(assetKeys.skeleton.idle, "/assets/sunnyside/characters/skeleton/skeleton_idle_strip6.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.skeleton.walk, "/assets/sunnyside/characters/skeleton/skeleton_walk_strip8.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.skeleton.attack, "/assets/sunnyside/characters/skeleton/skeleton_attack_strip7.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.skeleton.hurt, "/assets/sunnyside/characters/skeleton/skeleton_hurt_strip7.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-    this.load.spritesheet(assetKeys.skeleton.death, "/assets/sunnyside/characters/skeleton/skeleton_death_strip10.png", {
-      frameWidth: 96,
-      frameHeight: 64,
-    });
-  }
-
   private loadAobMapAssets(): void {
     const root = "/assets/aob-map/runtime";
     const legacyRoot = "/assets/aob-map/optimized";
     const newMapRoot = "/new-map";
-    this.load.image(assetKeys.aobMap.baseGrass, `${newMapRoot}/base-grass.png`);
+    this.load.image(assetKeys.aobMap.baseGrass, "/last-assets/grass-256x256.png");
     this.load.image(assetKeys.aobMap.baseDirt, `${newMapRoot}/base-dirt.png`);
     this.load.image(assetKeys.aobMap.baseRocky, `${newMapRoot}/base-rocky.png`);
     this.load.image(assetKeys.aobMap.baseShallowWater, `${newMapRoot}/base-shallow-water.png`);
@@ -147,26 +102,12 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobMap.campfire, `${legacyRoot}/campfire.png`);
   }
 
-  private loadAobBuildingAssets(): void {
-    const root = "/assets/aob-buildings/optimized";
-    this.load.image(assetKeys.aobBuildings.townCenter, `${root}/town-center.png`);
-    this.load.image(assetKeys.aobBuildings.house, `${root}/house.png`);
-    this.load.image(assetKeys.aobBuildings.barracks, `${root}/barracks.png`);
-    this.load.image(assetKeys.aobBuildings.lumberCamp, `${root}/lumber-camp.png`);
-    this.load.image(assetKeys.aobBuildings.mill, `${root}/mill.png`);
-    this.load.image(assetKeys.aobBuildings.stoneCamp, `${root}/stone-camp.png`);
-    this.load.image(assetKeys.aobBuildings.goldCamp, `${root}/gold-camp.png`);
-    this.load.image(assetKeys.aobBuildings.farm, `${root}/farm.png`);
-    this.load.image(assetKeys.aobBuildings.watchTower, `${root}/watch-tower.png`);
-    this.load.image(assetKeys.aobBuildings.wall, `${root}/wall.png`);
-  }
-
   private loadAobBuildingStaticAssets(): void {
     const root = "/assets/aob-buildings/static-runtime";
     this.load.image(assetKeys.aobBuildingStatic.construction, `${root}/construction.png`);
-    this.load.image(assetKeys.aobBuildingStatic.townCenter.genesis, `${root}/town-center-t1.png`);
-    this.load.image(assetKeys.aobBuildingStatic.townCenter.settlement, `${root}/town-center-t2.png`);
-    this.load.image(assetKeys.aobBuildingStatic.townCenter.network, `${root}/town-center-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.genesis, "/last-assets/hdv-t1.png");
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.settlement, "/last-assets/hdv-t2.png");
+    this.load.image(assetKeys.aobBuildingStatic.townCenter.network, "/last-assets/hdv-t3.png");
     this.load.image(assetKeys.aobBuildingStatic.house.genesis, `${root}/house-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.house.settlement, `${root}/house-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.house.network, `${root}/house-t3.png`);
@@ -191,6 +132,15 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobBuildingStatic.watchTower.genesis, `${root}/watch-tower-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.settlement, `${root}/watch-tower-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.network, `${root}/watch-tower-t3.png`);
+  }
+
+  private loadAobWallAssets(): void {
+    const version = "20260424-225617";
+    this.load.image(assetKeys.aobWalls.palisadeHorizontal, `/last-assets/runtime/wall-palisade-horizontal.png?v=${version}`);
+    this.load.image(assetKeys.aobWalls.palisadeVertical, `/last-assets/runtime/wall-palisade-vertical.png?v=${version}`);
+    this.load.image(assetKeys.aobWalls.palisadeCornerLeft, `/last-assets/runtime/wall-palisade-corner-left.png?v=${version}`);
+    this.load.image(assetKeys.aobWalls.palisadeCornerRight, `/last-assets/runtime/wall-palisade-corner-right.png?v=${version}`);
+    this.load.image(assetKeys.aobWalls.palisadeGate, `/last-assets/runtime/gate-palisade.png?v=${version}`);
   }
 }
 
