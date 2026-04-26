@@ -1,0 +1,105 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.11.2",
+  "name": "aob-biome",
+  "tilewidth": 16,
+  "tileheight": 16,
+  "spacing": 0,
+  "margin": 0,
+  "tilecount": 8,
+  "columns": 8,
+  "image": "aob-biome-tiles.png",
+  "imagewidth": 128,
+  "imageheight": 16,
+  "tiles": [
+    {
+      "id": 0,
+      "type": "grass",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "grass"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "type": "grassDark",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "grassDark"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "path",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "path"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "dirt",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "dirt"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "water",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "water"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "deepWater",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "deepWater"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stoneGround",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "stoneGround"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "crystalGround",
+      "properties": [
+        {
+          "name": "tileType",
+          "type": "string",
+          "value": "crystalGround"
+        }
+      ]
+    }
+  ]
+}

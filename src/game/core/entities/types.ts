@@ -101,6 +101,7 @@ export type ProductionQueueItem = {
 
 export type ProducerComponent = {
   queue: ProductionQueueItem[];
+  rallyPoint?: Vec2;
 };
 
 export type CombatComponent = {

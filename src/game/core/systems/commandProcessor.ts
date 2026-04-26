@@ -15,7 +15,7 @@ import type { EntityId, GameEntity } from "../entities/types";
 import { createBuilding, worldFromTile } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
 import type { GameState, TileCoord, Vec2 } from "../state/types";
-import { clampToMap, distance, findFreeAdjacentTiles, findNearestFreeAdjacentTile, isRectBuildable, tileCenter, worldToTile } from "./mapQueries";
+import { clampToMap, distance, findFreeAdjacentTiles, findNearestFreeAdjacentTile, isRectBuildable, isTileWalkableForUnit, tileCenter, worldToTile } from "./mapQueries";
 import { stampBuildingGround } from "./mapEditing";
 import { findPath } from "./pathfinding";
 import { wallLineSegments } from "./wallPlacement";
@@ -45,6 +45,9 @@ export function applyCommand(state: GameState, command: GameCommand): void {
       break;
     case "trainUnit":
       applyTrainUnit(state, command.playerId, command.buildingId, command.unitType);
+      break;
+    case "setRallyPoint":
+      applySetRallyPoint(state, command.playerId, command.buildingId, command.target);
       break;
     case "advanceAge":
       applyAdvanceAge(state, command.playerId, command.targetAge);
@@ -297,6 +300,23 @@ function applyTrainUnit(state: GameState, playerId: PlayerId, buildingId: Entity
     totalTicks: unitConfig.trainTicks,
   });
   addMessage(state, `${unitConfig.label} queued.`);
+}
+
+function applySetRallyPoint(state: GameState, playerId: PlayerId, buildingId: EntityId, target: Vec2): void {
+  const building = state.entities[buildingId];
+  if (!building?.producer || !building.building?.completed || building.ownerId !== playerId) {
+    return;
+  }
+
+  const clampedTarget = clampToMap(state.map, target);
+  const targetTile = worldToTile(clampedTarget);
+  if (!isTileWalkableForUnit(state, targetTile)) {
+    addMessage(state, "Cannot set rally point there.");
+    return;
+  }
+
+  building.producer.rallyPoint = clampedTarget;
+  addMessage(state, "Rally point set.");
 }
 
 function applyAdvanceAge(state: GameState, playerId: PlayerId, explicitTarget?: keyof typeof ageConfigs): void {

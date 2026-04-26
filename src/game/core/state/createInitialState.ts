@@ -42,6 +42,9 @@ export function createInitialState(): GameState {
       selectedIds: [],
     },
     messages: [],
+    objectives: {
+      completedIds: [],
+    },
   };
 
   seedVillage(state);

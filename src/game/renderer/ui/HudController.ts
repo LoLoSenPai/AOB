@@ -1,6 +1,8 @@
-import { PLAYER_ID, RESOURCE_TYPES, type AgeId, type ResourceType } from "../../data/constants";
+import { PLAYER_ID, RESOURCE_TYPES, TILE_SIZE, type AgeId, type ResourceType } from "../../data/constants";
 import { ageConfigs, buildingConfigs, canAfford, costForBuilding, hasReachedAge, labelForBuilding, unitConfigs, wallTierForAge } from "../../data/definitions";
 import type { BuildingType, GameEntity, UnitType } from "../../core/entities/types";
+import { workerTaskCountsForPlayer } from "../../core/selectors/economy";
+import { objectiveViewsForState } from "../../core/selectors/objectives";
 import type { GameState } from "../../core/state/types";
 
 type HudCallbacks = {
@@ -11,12 +13,20 @@ type HudCallbacks = {
   onTrainRequest: (unitType: UnitType) => void;
   onAdvanceAgeRequest: () => void;
   onReseedFarmRequest: (farmId: string) => void;
+  onSelectIdleWorker: () => void;
+  onSelectTownCenter: () => void;
 };
 
 export type HudRenderContext = {
   placementType?: BuildingType;
   wallLineStarted: boolean;
   buildMenuOpen: boolean;
+  camera?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 };
 
 const BUILD_GROUPS: { label: string; buildings: BuildingType[] }[] = [
@@ -34,6 +44,7 @@ const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
 
 const POPULATION_ICON_PATH = "/last-assets/runtime/icon-population.png";
 const WALL_ICON_PATH = "/last-assets/runtime/wall-palisade-horizontal.png?v=20260424-225617";
+const SOLANA_CREST_PATH = "/assets/aob-map/runtime/solana-ui-crest.png";
 
 const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> = {
   townCenter: {
@@ -119,6 +130,7 @@ export class HudController {
     const queuedPopulation = queuedPopulationForPlayer(state);
     const population = populationStatus(state);
     const age = ageConfigs[player.age];
+    const workerTasks = workerTaskCountsForPlayer(state);
     const ageProgress = player.ageProgress
       ? `<span class="status-pill age-pill"><span>${ageConfigs[player.ageProgress.targetAge].label}</span><span class="age-progress"><span style="width:${Math.round((1 - player.ageProgress.remainingTicks / player.ageProgress.totalTicks) * 100)}%"></span></span></span>`
       : `<span class="status-pill age-pill">${age.label}</span>`;
@@ -126,12 +138,14 @@ export class HudController {
     return `
       <div class="hud-topbar">
         <div class="hud-brand">
-          <span class="hud-crest">AOB</span>
+          <span class="hud-crest"><img class="hud-crest-img" src="${SOLANA_CREST_PATH}" alt=""></span>
           <span class="hud-title">Age of Blockchains</span>
         </div>
         <div class="resource-strip">${resourceMarkup}</div>
         <div class="status-strip">
           ${ageProgress}
+          <button class="status-pill status-action" data-select-town-center="true">H</button>
+          <button class="status-pill status-action ${workerTasks.idle > 0 ? "" : "status-action--quiet"}" data-select-idle="true">Idle <strong>${workerTasks.idle}</strong></button>
           <span class="status-pill ${population.pillClass}">
             <img class="resource-icon-img" src="${POPULATION_ICON_PATH}" alt="">
             <strong>${player.population}/${player.populationCap}</strong>${queuedPopulation > 0 ? `<span class="queued-pop">+${queuedPopulation}</span>` : ""}
@@ -139,6 +153,9 @@ export class HudController {
         </div>
       </div>
       ${population.banner}
+      ${workerSummaryMarkup(workerTasks)}
+      ${objectivesMarkup(state)}
+      ${minimapMarkup(state, context)}
       ${primary ? panelMarkup(primary, selected, state) : ""}
       ${commandDockMarkup(state, primary, context)}
       ${messagesMarkup(state)}
@@ -182,6 +199,12 @@ export class HudController {
     this.root.querySelectorAll<HTMLButtonElement>("[data-cancel-placement]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onCancelPlacement());
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-select-idle]").forEach((button) => {
+      button.addEventListener("click", () => this.callbacks.onSelectIdleWorker());
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-select-town-center]").forEach((button) => {
+      button.addEventListener("click", () => this.callbacks.onSelectTownCenter());
+    });
   }
 }
 
@@ -195,10 +218,47 @@ function resourcePill(type: ResourceType, value: number): string {
   `;
 }
 
+function workerSummaryMarkup(workerTasks: ReturnType<typeof workerTaskCountsForPlayer>): string {
+  return `
+    <div class="worker-summary">
+      <span><strong>${workerTasks.total}</strong> villagers</span>
+      <span>Gather ${workerTasks.gathering}</span>
+      <span>Build ${workerTasks.building}</span>
+      <span>Carry ${workerTasks.carrying}</span>
+    </div>
+  `;
+}
+
+function objectivesMarkup(state: GameState): string {
+  const objectives = objectiveViewsForState(state);
+  return `
+    <div class="objective-panel">
+      <div class="objective-title">Objectives</div>
+      <div class="objective-list">
+        ${objectives
+          .map(
+            (objective) => `
+              <div class="objective-row objective-row--${objective.status}">
+                <span class="objective-marker">${objective.status === "done" ? "OK" : objective.status === "active" ? "!" : ""}</span>
+                <span class="objective-copy">
+                  <span class="objective-name">${objective.title}</span>
+                  <span class="objective-detail">${objective.detail}</span>
+                </span>
+                <span class="objective-progress">${objective.current}/${objective.target}</span>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
 function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], state: GameState): string {
   const title = panelTitle(primary, selected);
   const details = primary ? detailsFor(primary, selected, state) : "No selection";
   const meta = primary ? panelMeta(primary, selected, state) : "";
+  const extra = primary ? panelExtraMarkup(primary, state) : "";
   return `
     <div class="hud-bottom-panel">
       <div class="hud-panel-header">
@@ -211,9 +271,82 @@ function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], st
       <div class="hud-panel-grid">
         <div class="hud-info-list">${details}</div>
         <div class="hud-info-list hud-info-help">${selectionHelp(primary, state)}</div>
+        ${extra}
       </div>
     </div>
   `;
+}
+
+function panelExtraMarkup(primary: GameEntity, state: GameState): string {
+  const queue = productionQueueMarkup(primary);
+  const rally = rallyPointMarkup(primary);
+  const age = ageProgressMarkup(primary, state);
+  if (!queue && !rally && !age) {
+    return "";
+  }
+  return `<div class="hud-panel-extra">${queue}${age}${rally}</div>`;
+}
+
+function productionQueueMarkup(entity: GameEntity): string {
+  if (!entity.producer) {
+    return "";
+  }
+  if (entity.producer.queue.length === 0) {
+    return `
+      <div class="queue-box">
+        <div class="queue-title">Production Queue</div>
+        <div class="queue-empty">No units queued.</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="queue-box">
+      <div class="queue-title">Production Queue</div>
+      <div class="queue-list">
+        ${entity.producer.queue
+          .map((item, index) => {
+            const progress = Math.round((1 - item.remainingTicks / Math.max(1, item.totalTicks)) * 100);
+            return `
+              <div class="queue-item ${index === 0 ? "queue-item--active" : ""}">
+                <span>${unitConfigs[item.unitType].label}</span>
+                <strong>${index === 0 ? `${progress}%` : "Queued"}</strong>
+                ${index === 0 ? `<span class="queue-progress"><span style="width:${progress}%"></span></span>` : ""}
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    </div>
+  `;
+}
+
+function ageProgressMarkup(entity: GameEntity, state: GameState): string {
+  const progress = state.players[PLAYER_ID].ageProgress;
+  if (!progress || entity.building?.type !== "townCenter") {
+    return "";
+  }
+  const ratio = Math.round((1 - progress.remainingTicks / Math.max(1, progress.totalTicks)) * 100);
+  return `
+    <div class="queue-box">
+      <div class="queue-title">Age Progress</div>
+      <div class="queue-item queue-item--active">
+        <span>${ageConfigs[progress.targetAge].label}</span>
+        <strong>${ratio}%</strong>
+        <span class="queue-progress"><span style="width:${ratio}%"></span></span>
+      </div>
+    </div>
+  `;
+}
+
+function rallyPointMarkup(entity: GameEntity): string {
+  if (!entity.producer) {
+    return "";
+  }
+  const rally = entity.producer.rallyPoint;
+  if (!rally) {
+    return `<div class="rally-line">Rally: right click terrain.</div>`;
+  }
+  return `<div class="rally-line">Rally: ${Math.floor(rally.x / TILE_SIZE)}, ${Math.floor(rally.y / TILE_SIZE)}</div>`;
 }
 
 function commandDockMarkup(state: GameState, primary: GameEntity | undefined, context: HudRenderContext): string {
@@ -339,6 +472,55 @@ function messagesMarkup(state: GameState): string {
   `;
 }
 
+function minimapMarkup(state: GameState, context: HudRenderContext): string {
+  const mapWidth = state.map.width * state.map.tileSize;
+  const mapHeight = state.map.height * state.map.tileSize;
+  const camera = context.camera;
+  const cameraStyle = camera
+    ? `left:${percent(camera.x, mapWidth)}%;top:${percent(camera.y, mapHeight)}%;width:${percent(camera.width, mapWidth)}%;height:${percent(camera.height, mapHeight)}%;`
+    : "left:0%;top:0%;width:36%;height:28%;";
+  const dots = Object.values(state.entities).map((entity) => minimapDot(entity, state)).join("");
+
+  return `
+    <div class="hud-minimap">
+      <div class="minimap-frame">
+        <div class="minimap-map">
+          <div class="minimap-water"></div>
+          <div class="minimap-rock"></div>
+          <div class="minimap-crystal"></div>
+          ${dots}
+          <div class="minimap-camera" style="${cameraStyle}"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function minimapDot(entity: GameEntity, state: GameState): string {
+  const left = percent(entity.position.x, state.map.width * state.map.tileSize);
+  const top = percent(entity.position.y, state.map.height * state.map.tileSize);
+  let className = "minimap-dot";
+  if (entity.resourceNode) {
+    className += ` minimap-dot--${entity.resourceNode.resourceType}`;
+  } else if (entity.ownerId === PLAYER_ID && entity.kind === "building") {
+    className += " minimap-dot--player-building";
+  } else if (entity.ownerId === PLAYER_ID) {
+    className += " minimap-dot--player-unit";
+  } else if (entity.ownerId) {
+    className += " minimap-dot--enemy";
+  } else {
+    className += " minimap-dot--neutral";
+  }
+  return `<span class="${className}" style="left:${left}%;top:${top}%;"></span>`;
+}
+
+function percent(value: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+  return Math.round(Math.max(0, Math.min(100, (value / total) * 1000)) / 10);
+}
+
 function panelTitle(primary: GameEntity | undefined, selected: GameEntity[]): string {
   if (!primary) {
     return "Age Of Blockchains";
@@ -405,7 +587,10 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
   if (selected.length > 1) {
     const workers = selected.filter((entity) => entity.worker).length;
     const fighters = selected.filter((entity) => entity.combat).length;
-    return `<span><strong>Villagers:</strong> ${workers}</span><span><strong>Infantry:</strong> ${fighters}</span>`;
+    const building = selected.filter((entity) => entity.worker?.task?.kind === "build").length;
+    const gathering = selected.filter((entity) => entity.worker?.task?.kind === "gather").length;
+    const idle = selected.filter((entity) => entity.worker && !entity.worker.task && !entity.worker.carrying && !entity.mobile?.target && (entity.mobile?.path.length ?? 0) === 0).length;
+    return `<span><strong>Villagers:</strong> ${workers}</span><span><strong>Infantry:</strong> ${fighters}</span><span><strong>Idle:</strong> ${idle}</span><span><strong>Gathering:</strong> ${gathering}</span><span><strong>Building:</strong> ${building}</span>`;
   }
 
   const health = primary.health ? `<span><strong>Health:</strong> ${Math.max(0, Math.ceil(primary.health.current))}/${primary.health.max}</span>` : "";
@@ -420,11 +605,8 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
   const resource = primary.resourceNode ? `<span><strong>Contains:</strong> ${Math.max(0, Math.ceil(primary.resourceNode.amount))} ${label(primary.resourceNode.resourceType)}</span>` : "";
   const ownerAge = primary.ownerId ? state.players[primary.ownerId]?.age : undefined;
   const wall = primary.building?.type === "wall" && ownerAge ? `<span><strong>Tier:</strong> ${wallTierForAge(ownerAge).label}</span>` : "";
-  const queue = primary.producer?.queue[0]
-    ? `<span><strong>Queue:</strong> ${unitConfigs[primary.producer.queue[0].unitType].label} ${Math.round((1 - primary.producer.queue[0].remainingTicks / primary.producer.queue[0].totalTicks) * 100)}%</span>`
-    : "";
 
-  return `${health}${build}${wall}${farm}${storage}${populationCap}${carried}${task}${resource}${queue}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
+  return `${health}${build}${wall}${farm}${storage}${populationCap}${carried}${task}${resource}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
 }
 
 function selectionHelp(primary: GameEntity | undefined, state: GameState): string {
@@ -441,14 +623,16 @@ function selectionHelp(primary: GameEntity | undefined, state: GameState): strin
     const player = state.players[PLAYER_ID];
     const nextAge = ageConfigs[player.age].nextAge;
     return nextAge
-      ? `<span>Advance to ${ageConfigs[nextAge].label} to unlock stronger walls and new buildings.</span>`
+      ? `<span>Advance to ${ageConfigs[nextAge].label} to unlock stronger walls and new buildings.</span><span>Right click terrain to set a rally point.</span>`
       : "<span>Your village has reached the current highest age.</span>";
   }
   if (primary.farm) {
     return primary.farm.depleted ? "<span>Use Reseed to restore this farm with wood.</span>" : "<span>Right click with villagers selected to harvest this farm.</span>";
   }
   if (primary.building?.completed) {
-    return "<span>Use the command dock for production, age-up, or village expansion.</span>";
+    return primary.producer
+      ? "<span>Use the command dock for production.</span><span>Right click terrain to set a rally point.</span>"
+      : "<span>Use the command dock for production, age-up, or village expansion.</span>";
   }
   if (primary.resourceNode) {
     return "<span>Right click with villagers selected to gather this resource.</span>";
@@ -556,7 +740,7 @@ function messageToneClass(text: string): string {
   if (text.includes("Population cap reached")) {
     return "message-line--danger";
   }
-  if (text.includes("completed") || text.includes("Age advanced")) {
+  if (text.includes("completed") || text.includes("Age advanced") || text.includes("Objective complete")) {
     return "message-line--good";
   }
   return "";

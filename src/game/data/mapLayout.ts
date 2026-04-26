@@ -1,5 +1,6 @@
 import type { ResourceNodeType } from "../core/entities/types";
 import type { TileCoord, TileType } from "../core/state/types";
+import type { GrassDetailFrame, ImageDecalKey, VillagePropFrame } from "./visuals";
 
 export type TerrainStamp =
   | {
@@ -29,6 +30,7 @@ export type MapLayout = {
   width: number;
   height: number;
   terrain: TerrainStamp[];
+  visualOverlays: VisualOverlay[];
   resources: Record<Exclude<ResourceNodeType, "farmFood">, TileCoord[]>;
   village: {
     townCenter: TileCoord;
@@ -36,6 +38,53 @@ export type MapLayout = {
     workers: TileCoord[];
   };
 };
+
+export type VisualOverlay =
+  | {
+      kind: "villageGround" | "pathDecal";
+      tile: TileCoord;
+      width: number;
+      height: number;
+      angle?: number;
+      alpha?: number;
+      depthOffset?: number;
+      flipX?: boolean;
+      flipY?: boolean;
+    }
+  | {
+      kind: "imageDecal";
+      asset: ImageDecalKey;
+      tile: TileCoord;
+      width: number;
+      height?: number;
+      angle?: number;
+      alpha?: number;
+      depthOffset?: number;
+      flipX?: boolean;
+      flipY?: boolean;
+    }
+  | {
+      kind: "grassDetail";
+      frame: GrassDetailFrame;
+      tile: TileCoord;
+      width: number;
+      angle?: number;
+      alpha?: number;
+      depthOffset?: number;
+      flipX?: boolean;
+      flipY?: boolean;
+    }
+  | {
+      kind: "villageProp";
+      frame: VillagePropFrame;
+      tile: TileCoord;
+      width: number;
+      angle?: number;
+      alpha?: number;
+      depthOffset?: number;
+      flipX?: boolean;
+      flipY?: boolean;
+    };
 
 export const initialMapLayout: MapLayout = {
   width: 128,
@@ -45,10 +94,6 @@ export const initialMapLayout: MapLayout = {
     { kind: "rect", tile: "water", x: 0, y: 112, w: 38, h: 16 },
     { kind: "ellipse", tile: "water", cx: 2, cy: 96, rx: 12, ry: 18 },
 
-    { kind: "path", tile: "path", radius: 1, points: [{ x: 34, y: 57 }, { x: 46, y: 58 }, { x: 58, y: 60 }, { x: 78, y: 58 }, { x: 91, y: 49 }] },
-    { kind: "path", tile: "path", radius: 1, points: [{ x: 59, y: 62 }, { x: 58, y: 75 }, { x: 50, y: 88 }, { x: 38, y: 100 }] },
-    { kind: "path", tile: "path", radius: 1, points: [{ x: 58, y: 60 }, { x: 45, y: 48 }, { x: 32, y: 38 }, { x: 22, y: 28 }] },
-
     { kind: "ellipse", tile: "dirt", cx: 102, cy: 43, rx: 25, ry: 24 },
     { kind: "rect", tile: "dirt", x: 82, y: 52, w: 32, h: 14 },
     { kind: "ellipse", tile: "stoneGround", cx: 104, cy: 42, rx: 17, ry: 16 },
@@ -56,6 +101,19 @@ export const initialMapLayout: MapLayout = {
 
     { kind: "ellipse", tile: "crystalGround", cx: 108, cy: 100, rx: 22, ry: 20 },
     { kind: "rect", tile: "crystalGround", x: 98, y: 88, w: 26, h: 24 },
+  ],
+  visualOverlays: [
+    { kind: "villageGround", tile: { x: 62, y: 61 }, width: 760, height: 506, alpha: 0.96 },
+    { kind: "imageDecal", asset: "stoneGroundPatch", tile: { x: 104, y: 44 }, width: 560, height: 410, alpha: 0.94, depthOffset: -4 },
+    { kind: "imageDecal", asset: "grassToStoneSouth", tile: { x: 104, y: 32 }, width: 470, height: 320, alpha: 0.46 },
+    { kind: "imageDecal", asset: "grassToStoneWest", tile: { x: 119, y: 44 }, width: 420, height: 320, alpha: 0.42 },
+    { kind: "imageDecal", asset: "grassToStoneEast", tile: { x: 89, y: 44 }, width: 420, height: 320, alpha: 0.42 },
+    { kind: "imageDecal", asset: "grassToStoneNorth", tile: { x: 104, y: 58 }, width: 470, height: 320, alpha: 0.42 },
+    { kind: "imageDecal", asset: "crystalGroundPatch", tile: { x: 112, y: 102 }, width: 560, height: 410, alpha: 0.94, depthOffset: -4 },
+    { kind: "imageDecal", asset: "grassToCrystalSouth", tile: { x: 112, y: 87 }, width: 480, height: 330, alpha: 0.46 },
+    { kind: "imageDecal", asset: "grassToCrystalWest", tile: { x: 128, y: 102 }, width: 430, height: 330, alpha: 0.42 },
+    { kind: "imageDecal", asset: "grassToCrystalEast", tile: { x: 96, y: 102 }, width: 430, height: 330, alpha: 0.42 },
+    { kind: "imageDecal", asset: "grassToCrystalNorth", tile: { x: 112, y: 117 }, width: 480, height: 330, alpha: 0.4 },
   ],
   resources: {
     tree: [
@@ -67,12 +125,12 @@ export const initialMapLayout: MapLayout = {
       { x: 18, y: 66 }, { x: 24, y: 69 }, { x: 30, y: 72 }, { x: 36, y: 76 },
     ],
     stone: [
-      { x: 95, y: 36 }, { x: 100, y: 38 }, { x: 106, y: 39 }, { x: 111, y: 42 },
-      { x: 97, y: 47 }, { x: 103, y: 49 }, { x: 109, y: 51 }, { x: 113, y: 55 },
+      { x: 99, y: 38 }, { x: 103, y: 37 }, { x: 108, y: 39 }, { x: 112, y: 42 },
+      { x: 101, y: 46 }, { x: 105, y: 48 }, { x: 110, y: 50 }, { x: 112, y: 53 },
     ],
     gold: [
-      { x: 101, y: 89 }, { x: 108, y: 91 }, { x: 116, y: 92 }, { x: 122, y: 96 },
-      { x: 102, y: 103 }, { x: 110, y: 106 }, { x: 119, y: 108 }, { x: 123, y: 113 },
+      { x: 106, y: 95 }, { x: 112, y: 94 }, { x: 118, y: 96 }, { x: 121, y: 100 },
+      { x: 105, y: 104 }, { x: 111, y: 106 }, { x: 117, y: 108 }, { x: 120, y: 111 },
     ],
     berries: [
       { x: 48, y: 52 }, { x: 53, y: 55 }, { x: 67, y: 52 }, { x: 71, y: 56 },

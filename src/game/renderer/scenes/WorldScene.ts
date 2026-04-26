@@ -2,24 +2,32 @@ import Phaser from "phaser";
 import { PLAYER_ID, TILE_SIZE, type AgeId } from "../../data/constants";
 import { assetKeys, type HumanAction } from "../../data/assets";
 import { buildingConfigs, wallTierForAge } from "../../data/definitions";
+import { initialMapLayout, type VisualOverlay } from "../../data/mapLayout";
 import {
+  grassDetailFrames,
+  villagePropFrames,
   buildingFallbackVisualSizeForType,
   buildingGroundBoundsForType,
   buildingStaticAssetKeyForType,
   buildingStaticVisualSizeForType,
   constructionVisualSizeForType,
+  imageDecalVisuals,
   resourceVisuals,
   terrainVisualFor,
   TERRAIN_STAMP_TILES,
+  visualOverlayVisuals,
+  type AtlasFrameDef,
 } from "../../data/visuals";
 import type { BuildingType, EntityId, GameEntity } from "../../core/entities/types";
+import { idleWorkerIdsForPlayer, workerTaskCountsForPlayer } from "../../core/selectors/economy";
+import { objectiveViewsForState } from "../../core/selectors/objectives";
 import { Simulation } from "../../core/simulation/Simulation";
-import type { MapState, TileCoord, TileType, Vec2 } from "../../core/state/types";
+import type { MapState, ResourceStock, TileCoord, TileType, Vec2 } from "../../core/state/types";
 import { worldToTile } from "../../core/systems/mapQueries";
 import { canPlaceBuildingAt, canPlaceWallLineAt } from "../../core/systems/simulationSystems";
 import { wallLineSegments, type WallLineSegment } from "../../core/systems/wallPlacement";
 import { registerAnimations } from "../world/AnimationRegistry";
-import { HudController } from "../ui/HudController";
+import { HudController, type HudRenderContext } from "../ui/HudController";
 
 type EntityView = {
   container: Phaser.GameObjects.Container;
@@ -56,7 +64,7 @@ const TERRAIN_BASE_DEPTH = -1000;
 const TERRAIN_TRANSITION_DEPTH = -950;
 const UNIT_SPRITE_SCALE = 1.28;
 const UNIT_SPRITE_ORIGIN_Y = 0.61;
-const GROUND_PAD_DEPTH = -500;
+const GROUND_PAD_DEPTH = -875;
 
 export class WorldScene extends Phaser.Scene {
   private simulation!: Simulation;
@@ -66,6 +74,7 @@ export class WorldScene extends Phaser.Scene {
   private dragStartScreen?: Vec2;
   private dragGraphics?: Phaser.GameObjects.Graphics;
   private placementGraphics?: Phaser.GameObjects.Graphics;
+  private rallyGraphics?: Phaser.GameObjects.Graphics;
   private placementPreviewGround?: Phaser.GameObjects.TileSprite;
   private placementPreviewSprite?: Phaser.GameObjects.Sprite;
   private readonly wallPreviewSprites: Phaser.GameObjects.Sprite[] = [];
@@ -78,6 +87,8 @@ export class WorldScene extends Phaser.Scene {
   private isPanning = false;
   private panLastScreen?: Vec2;
   private currentCursor = "";
+  private solanaAtlasFramesRegistered = false;
+  private nextIdleWorkerIndex = 0;
 
   constructor() {
     super("WorldScene");
@@ -99,6 +110,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.dragGraphics = this.add.graphics().setDepth(10_000);
     this.placementGraphics = this.add.graphics().setDepth(9_999);
+    this.rallyGraphics = this.add.graphics().setDepth(9_998);
   }
 
   private configureTerrainTextureFilters(): void {
@@ -117,6 +129,73 @@ export class WorldScene extends Phaser.Scene {
       assetKeys.aobMap.dirtStoneCornerOuter,
       assetKeys.aobMap.shoreEdge,
       assetKeys.aobMap.shoreCorner,
+      assetKeys.aobMap.solanaVillageGround,
+      assetKeys.aobMap.solanaPathDecal,
+      assetKeys.aobMap.solanaGrassDetailAtlas,
+      assetKeys.aobMap.solanaCrystalClusterLarge,
+      assetKeys.aobMap.solanaVillagePropsAtlas,
+      assetKeys.aobMap.solanaRoadStraight,
+      assetKeys.aobMap.solanaRoadCurveLeft,
+      assetKeys.aobMap.solanaRoadIntersection,
+      assetKeys.aobMap.solanaRoadEnd,
+      assetKeys.aobMap.solanaRoadCross,
+      assetKeys.aobMap.solanaRoadCurveEastSouth,
+      assetKeys.aobMap.solanaRoadCurveNorthEast,
+      assetKeys.aobMap.solanaRoadCurveSouthWest,
+      assetKeys.aobMap.solanaRoadCurveWestNorth,
+      assetKeys.aobMap.solanaRoadDiagonalNeSw,
+      assetKeys.aobMap.solanaRoadDiagonalNwSe,
+      assetKeys.aobMap.solanaRoadEndEast,
+      assetKeys.aobMap.solanaRoadEndNorth,
+      assetKeys.aobMap.solanaRoadEndSouth,
+      assetKeys.aobMap.solanaRoadEndWest,
+      assetKeys.aobMap.solanaRoadStraightHorizontal,
+      assetKeys.aobMap.solanaRoadStraightVertical,
+      assetKeys.aobMap.solanaRoadTEast,
+      assetKeys.aobMap.solanaRoadTNorth,
+      assetKeys.aobMap.solanaRoadTSouth,
+      assetKeys.aobMap.solanaRoadTWest,
+      assetKeys.aobMap.solanaStoneGroundPatch,
+      assetKeys.aobMap.solanaCrystalGroundPatch,
+      assetKeys.aobMap.solanaWaterShoreCurve,
+      assetKeys.aobMap.solanaGrassToCrystalEdgeEast,
+      assetKeys.aobMap.solanaGrassToCrystalEdgeNorth,
+      assetKeys.aobMap.solanaGrassToCrystalEdgeSouth,
+      assetKeys.aobMap.solanaGrassToCrystalEdgeWest,
+      assetKeys.aobMap.solanaGrassToDirtEdgeEast,
+      assetKeys.aobMap.solanaGrassToDirtEdgeNorth,
+      assetKeys.aobMap.solanaGrassToDirtEdgeSouth,
+      assetKeys.aobMap.solanaGrassToDirtEdgeWest,
+      assetKeys.aobMap.solanaGrassToStoneEdgeEast,
+      assetKeys.aobMap.solanaGrassToStoneEdgeNorth,
+      assetKeys.aobMap.solanaGrassToStoneEdgeSouth,
+      assetKeys.aobMap.solanaGrassToStoneEdgeWest,
+      assetKeys.aobMap.solanaShoreCornerNe,
+      assetKeys.aobMap.solanaShoreCornerNw,
+      assetKeys.aobMap.solanaShoreCornerSe,
+      assetKeys.aobMap.solanaShoreCornerSw,
+      assetKeys.aobMap.solanaShoreEdgeEast,
+      assetKeys.aobMap.solanaShoreEdgeNorth,
+      assetKeys.aobMap.solanaShoreEdgeSouth,
+      assetKeys.aobMap.solanaShoreEdgeWest,
+      assetKeys.aobMap.solanaTreeClusterA,
+      assetKeys.aobMap.solanaTreeClusterB,
+      assetKeys.aobMap.solanaPineCluster,
+      assetKeys.aobMap.solanaStoneNodeLarge,
+      assetKeys.aobMap.solanaStoneNodeSmall,
+      assetKeys.aobMap.solanaCrystalNodeLarge,
+      assetKeys.aobMap.solanaCrystalNodeSmall,
+      assetKeys.aobMap.solanaBerryBush,
+      assetKeys.aobMap.solanaBannerSmall,
+      assetKeys.aobMap.solanaBannerTall,
+      assetKeys.aobMap.solanaLanternPost,
+      assetKeys.aobMap.solanaCrate,
+      assetKeys.aobMap.solanaCratesStack,
+      assetKeys.aobMap.solanaBarrels,
+      assetKeys.aobMap.solanaFenceShort,
+      assetKeys.aobMap.solanaSacks,
+      assetKeys.aobMap.solanaValidatorObelisk,
+      assetKeys.aobMap.solanaFenceCorner,
     ]) {
       this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
     }
@@ -129,30 +208,37 @@ export class WorldScene extends Phaser.Scene {
     this.syncEntityViews();
     this.updateSelectionPulse();
     this.updatePlacementPreview();
+    this.updateRallyMarker();
     this.updateCursor();
     if (this.buildMenuOpen && this.selectedWorkerIds().length === 0) {
       this.buildMenuOpen = false;
     }
-    this.hud.render(this.simulation.state, {
-      placementType: this.placementType,
-      wallLineStarted: Boolean(this.wallLineStartTile),
-      buildMenuOpen: this.buildMenuOpen,
-    });
+    this.hud.render(this.simulation.state, this.createHudRenderContext());
   }
 
   private createTerrain(): void {
     const state = this.simulation.state;
     const chunkSize = TERRAIN_STAMP_TILES * TILE_SIZE;
+    const worldWidth = state.map.width * TILE_SIZE;
+    const worldHeight = state.map.height * TILE_SIZE;
+    this.add
+      .tileSprite(worldWidth / 2, worldHeight / 2, worldWidth, worldHeight, assetKeys.aobMap.baseGrass)
+      .setOrigin(0.5, 0.5)
+      .setDepth(TERRAIN_BASE_DEPTH);
+
     for (let y = 0; y < state.map.height; y += TERRAIN_STAMP_TILES) {
       for (let x = 0; x < state.map.width; x += TERRAIN_STAMP_TILES) {
         const kind = terrainKindForChunk(state.map, x, y);
+        if (isGrassLike(kind) || shouldLetVisualDecalCover(kind, x, y)) {
+          continue;
+        }
         const visual = terrainVisualFor(kind);
         const variation = hash2(x, y);
         const tile = this.add
           .image(x * TILE_SIZE, y * TILE_SIZE, visual.key)
           .setOrigin(0, 0)
           .setDisplaySize(chunkSize, chunkSize)
-          .setDepth(TERRAIN_BASE_DEPTH)
+          .setDepth(TERRAIN_BASE_DEPTH + 6)
           .setAlpha(visual.alpha ?? 1);
 
         if (visual.canMirror) {
@@ -163,6 +249,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.createTerrainTransitions(state, chunkSize);
+    this.createVisualOverlays();
   }
 
   private createTerrainTransitions(state: Simulation["state"], chunkSize: number): void {
@@ -176,7 +263,9 @@ export class WorldScene extends Phaser.Scene {
         const worldX = x * TILE_SIZE + chunkSize / 2;
         const worldY = y * TILE_SIZE + chunkSize / 2;
         const neighbors = { north, east, south, west };
-
+        if (shouldSkipVisualDecalTransitions(kind, neighbors, x, y)) {
+          continue;
+        }
         if (isGrassLike(kind)) {
           this.placeTransitionEdges(worldX, worldY, chunkSize, neighbors, isWaterChunk, assetKeys.aobMap.shoreEdge, "south");
           this.placeTransitionCorner(worldX, worldY, chunkSize, neighbors, isWaterChunk, assetKeys.aobMap.shoreCorner);
@@ -260,6 +349,90 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(TERRAIN_TRANSITION_DEPTH + 1);
   }
 
+  private createVisualOverlays(): void {
+    this.registerSolanaAtlasFrames();
+    for (const overlay of initialMapLayout.visualOverlays) {
+      this.addVisualOverlay(overlay);
+    }
+  }
+
+  private registerSolanaAtlasFrames(): void {
+    if (this.solanaAtlasFramesRegistered) {
+      return;
+    }
+    this.registerAtlasFrames(assetKeys.aobMap.solanaGrassDetailAtlas, grassDetailFrames);
+    this.registerAtlasFrames(assetKeys.aobMap.solanaVillagePropsAtlas, villagePropFrames);
+    this.solanaAtlasFramesRegistered = true;
+  }
+
+  private registerAtlasFrames(textureKey: string, frames: Record<string, AtlasFrameDef>): void {
+    const texture = this.textures.get(textureKey);
+    for (const [name, frame] of Object.entries(frames)) {
+      if (!texture.has(name)) {
+        texture.add(name, 0, frame.x, frame.y, frame.width, frame.height);
+      }
+    }
+  }
+
+  private addVisualOverlay(overlay: VisualOverlay): void {
+    const worldX = overlay.tile.x * TILE_SIZE + TILE_SIZE / 2;
+    const worldY = overlay.tile.y * TILE_SIZE + TILE_SIZE / 2;
+    if (overlay.kind === "imageDecal") {
+      const visual = imageDecalVisuals[overlay.asset];
+      this.add
+        .image(worldX, worldY, visual.key)
+        .setOrigin(visual.originX, visual.originY)
+        .setDisplaySize(overlay.width, overlay.height ?? overlay.width)
+        .setAngle(overlay.angle ?? 0)
+        .setFlipX(Boolean(overlay.flipX))
+        .setFlipY(Boolean(overlay.flipY))
+        .setDepth(visual.depth + (overlay.depthOffset ?? 0))
+        .setAlpha(overlay.alpha ?? 1);
+      return;
+    }
+    const visual = visualOverlayVisuals[overlay.kind];
+    if (!("frame" in overlay)) {
+      this.add
+        .image(worldX, worldY, visual.key)
+        .setOrigin(visual.originX, visual.originY)
+        .setDisplaySize(overlay.width, overlay.height)
+        .setAngle(overlay.angle ?? 0)
+        .setFlipX(Boolean(overlay.flipX))
+        .setFlipY(Boolean(overlay.flipY))
+        .setDepth(visual.depth + (overlay.depthOffset ?? 0))
+        .setAlpha(overlay.alpha ?? 1);
+      return;
+    }
+
+    let frameName: string;
+    let frame: AtlasFrameDef;
+    if (overlay.kind === "grassDetail") {
+      frameName = overlay.frame;
+      frame = grassDetailFrames[overlay.frame];
+    } else {
+      frameName = overlay.frame;
+      frame = villagePropFrames[overlay.frame];
+    }
+    const container = this.add.container(worldX, worldY);
+    const frameShadow = frame.shadow ?? visual.shadow;
+    if (frameShadow) {
+      const shadow = this.add.graphics();
+      const ratio = overlay.width / Math.max(frame.width, frame.height);
+      shadow.fillStyle(0x090b07, frameShadow.alpha);
+      shadow.fillEllipse(0, frameShadow.y, frameShadow.width * ratio, frameShadow.height * ratio);
+      container.add(shadow);
+    }
+
+    const sprite = this.add.image(0, 0, visual.key, frameName).setOrigin(frame.originX, frame.originY);
+    setMaxDisplaySize(sprite, overlay.width);
+    sprite.setAngle(overlay.angle ?? 0);
+    sprite.setFlipX(Boolean(overlay.flipX));
+    sprite.setFlipY(Boolean(overlay.flipY));
+    sprite.setAlpha(overlay.alpha ?? 1);
+    container.add(sprite);
+    container.setDepth(visual.depth === 0 ? worldY + (overlay.depthOffset ?? -2) : visual.depth + (overlay.depthOffset ?? 0));
+  }
+
   private createMapDecor(): void {
     const state = this.simulation.state;
     const blocked = buildDecorBlockedTiles(state);
@@ -297,6 +470,14 @@ export class WorldScene extends Phaser.Scene {
   private addDecorSprite(decor: DecorPlacement): void {
     const worldX = decor.tileX * TILE_SIZE + TILE_SIZE / 2;
     const worldY = decor.tileY * TILE_SIZE + TILE_SIZE / 2;
+    if (decor.maxSize >= 30) {
+      const shadow = this.add.graphics();
+      shadow
+        .setPosition(worldX, worldY)
+        .setDepth(worldY + (decor.depthOffset ?? -2) - 1)
+        .fillStyle(0x090b07, 0.13)
+        .fillEllipse(0, 3, decor.maxSize * 0.72, Math.max(8, decor.maxSize * 0.2));
+    }
     const sprite = this.add
       .image(worldX, worldY, decor.key)
       .setOrigin(decor.originX ?? 0.5, decor.originY ?? 0.86)
@@ -307,7 +488,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createInput(): void {
-    this.keys = this.input.keyboard?.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,F") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard?.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,F,H,B,PERIOD") as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     this.setCursor("default");
 
@@ -416,7 +597,28 @@ export class WorldScene extends Phaser.Scene {
           farmId,
         });
       },
+      onSelectIdleWorker: () => {
+        this.selectNextIdleWorker();
+      },
+      onSelectTownCenter: () => {
+        this.selectTownCenter();
+      },
     });
+  }
+
+  private createHudRenderContext(): HudRenderContext {
+    const camera = this.cameras.main;
+    return {
+      placementType: this.placementType,
+      wallLineStarted: Boolean(this.wallLineStartTile),
+      buildMenuOpen: this.buildMenuOpen,
+      camera: {
+        x: Math.max(0, camera.scrollX),
+        y: Math.max(0, camera.scrollY),
+        width: camera.width / camera.zoom,
+        height: camera.height / camera.zoom,
+      },
+    };
   }
 
   private installDebugHooks(): void {
@@ -424,12 +626,14 @@ export class WorldScene extends Phaser.Scene {
       render_game_to_text?: () => string;
       advanceTime?: (milliseconds: number) => void;
       setCameraTile?: (x: number, y: number, zoom?: number) => void;
+      setPlayerResources?: (resources: Partial<ResourceStock>) => void;
     };
     debugWindow.render_game_to_text = () => {
       const state = this.simulation.state;
       const entities = Object.values(state.entities);
       const player = state.players[PLAYER_ID];
       const selected = state.selection.selectedIds.map((id) => state.entities[id]?.label ?? id);
+      const primary = state.selection.selectedIds.map((id) => state.entities[id]).find(Boolean);
       return JSON.stringify({
         tick: state.tick,
         player: {
@@ -440,6 +644,18 @@ export class WorldScene extends Phaser.Scene {
           ageProgress: player.ageProgress,
         },
         selected,
+        selectedDetail: primary
+          ? {
+              id: primary.id,
+              label: primary.label,
+              queue: primary.producer?.queue.map((item) => ({
+                unitType: item.unitType,
+                remainingTicks: item.remainingTicks,
+                totalTicks: item.totalTicks,
+              })),
+              rallyPoint: primary.producer?.rallyPoint,
+            }
+          : undefined,
         counts: {
           units: entities.filter((entity) => entity.kind === "unit").length,
           buildings: entities.filter((entity) => entity.kind === "building").length,
@@ -447,23 +663,35 @@ export class WorldScene extends Phaser.Scene {
           walls: entities.filter((entity) => entity.building?.type === "wall").length,
           completedWalls: entities.filter((entity) => entity.building?.type === "wall" && entity.building.completed).length,
         },
+        workerTasks: workerTaskCountsForPlayer(state),
+        objectives: objectiveViewsForState(state).map((objective) => ({
+          id: objective.id,
+          status: objective.status,
+          current: objective.current,
+          target: objective.target,
+        })),
         messages: state.messages.slice(-3).map((message) => message.text),
       });
     };
     debugWindow.advanceTime = (milliseconds: number) => {
-      this.simulation.update(milliseconds);
+      let remaining = Math.max(0, milliseconds);
+      while (remaining > 0) {
+        const step = Math.min(250, remaining);
+        this.simulation.update(step);
+        remaining -= step;
+      }
       this.syncEntityViews();
-      this.hud.render(this.simulation.state, {
-        placementType: this.placementType,
-        wallLineStarted: Boolean(this.wallLineStartTile),
-        buildMenuOpen: this.buildMenuOpen,
-      });
+      this.hud.render(this.simulation.state, this.createHudRenderContext());
     };
     debugWindow.setCameraTile = (x: number, y: number, zoom?: number) => {
       this.cameras.main.centerOn(x * TILE_SIZE, y * TILE_SIZE);
       if (zoom !== undefined) {
         this.cameras.main.setZoom(Phaser.Math.Clamp(zoom, 0.8, 1.7));
       }
+    };
+    debugWindow.setPlayerResources = (resources: Partial<ResourceStock>) => {
+      Object.assign(this.simulation.state.players[PLAYER_ID].resources, resources);
+      this.hud.render(this.simulation.state, this.createHudRenderContext());
     };
   }
 
@@ -489,7 +717,21 @@ export class WorldScene extends Phaser.Scene {
     }
     this.updateEdgeScroll(delta);
     if (Phaser.Input.Keyboard.JustDown(this.keys.ESC)) {
+      if (this.placementType || this.wallLineStartTile) {
+        this.cancelPlacement();
+      } else if (this.buildMenuOpen) {
+        this.buildMenuOpen = false;
+      }
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.H)) {
+      this.selectTownCenter();
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.PERIOD)) {
+      this.selectNextIdleWorker();
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.B) && this.selectedWorkerIds().length > 0) {
       this.cancelPlacement();
+      this.buildMenuOpen = true;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.F)) {
       if (this.scale.isFullscreen) {
@@ -507,6 +749,42 @@ export class WorldScene extends Phaser.Scene {
     this.hidePlacementPreviewGround();
     this.hidePlacementPreviewSprite();
     this.hideWallPlacementPreview();
+  }
+
+  private selectTownCenter(): void {
+    const townCenter = Object.values(this.simulation.state.entities).find(
+      (entity) => entity.ownerId === PLAYER_ID && entity.building?.type === "townCenter",
+    );
+    if (townCenter) {
+      this.selectEntity(townCenter.id, true);
+    }
+  }
+
+  private selectNextIdleWorker(): void {
+    const idleWorkerIds = idleWorkerIdsForPlayer(this.simulation.state, PLAYER_ID);
+    if (idleWorkerIds.length === 0) {
+      return;
+    }
+    const id = idleWorkerIds[this.nextIdleWorkerIndex % idleWorkerIds.length];
+    this.nextIdleWorkerIndex += 1;
+    this.selectEntity(id, true);
+  }
+
+  private selectEntity(id: EntityId, centerCamera: boolean): void {
+    const entity = this.simulation.state.entities[id];
+    if (!entity) {
+      return;
+    }
+    this.cancelPlacement();
+    this.buildMenuOpen = false;
+    this.simulation.dispatch({
+      type: "selectUnits",
+      playerId: PLAYER_ID,
+      entityIds: [id],
+    });
+    if (centerCamera) {
+      this.cameras.main.centerOn(entity.position.x, entity.position.y);
+    }
   }
 
   private playUiClick(frequency = 620, volume = 0.018): void {
@@ -624,15 +902,6 @@ export class WorldScene extends Phaser.Scene {
         continue;
       }
       hasNewSelection = true;
-      this.tweens.killTweensOf(view.container);
-      view.container.setScale(1);
-      this.tweens.add({
-        targets: view.container,
-        scale: 1.08,
-        duration: 95,
-        yoyo: true,
-        ease: "Sine.easeOut",
-      });
     }
     if (hasNewSelection) {
       this.playUiClick(560, 0.016);
@@ -884,7 +1153,7 @@ export class WorldScene extends Phaser.Scene {
     ground.setPosition(entity.position.x, entity.position.y + centerY);
     ground.setSize(bounds.width, bounds.height);
     ground.setDisplaySize(bounds.width, bounds.height);
-    ground.setAlpha(entity.building.completed ? 0.82 : 0.62);
+    ground.setAlpha(entity.building.completed ? 0.24 : 0.42);
   }
 
   private updateStaticBuildingSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
@@ -1068,6 +1337,18 @@ export class WorldScene extends Phaser.Scene {
     if (target) {
       this.commandSelectedToTarget(target, { x: pointer.worldX, y: pointer.worldY });
     } else {
+      const producer = this.getSelectedProducerBuilding();
+      if (producer && this.selectedUnitIds().length === 0) {
+        const rallyPoint = { x: pointer.worldX, y: pointer.worldY };
+        this.simulation.dispatch({
+          type: "setRallyPoint",
+          playerId: PLAYER_ID,
+          buildingId: producer.id,
+          target: rallyPoint,
+        });
+        this.showCommandIndicator(rallyPoint, "rally");
+        return;
+      }
       if (this.selectedUnitIds().length > 0) {
         this.showCommandIndicator({ x: pointer.worldX, y: pointer.worldY }, "move");
       }
@@ -1223,6 +1504,25 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  private updateRallyMarker(): void {
+    this.rallyGraphics?.clear();
+    const building = this.getSelectedProducerBuilding();
+    const rallyPoint = building?.producer?.rallyPoint;
+    if (!building || !rallyPoint || !this.rallyGraphics) {
+      return;
+    }
+
+    this.rallyGraphics.lineStyle(1, 0x67e4e9, 0.5);
+    this.rallyGraphics.lineBetween(building.position.x, building.position.y, rallyPoint.x, rallyPoint.y);
+    this.rallyGraphics.fillStyle(0x0b1719, 0.62);
+    this.rallyGraphics.fillCircle(rallyPoint.x, rallyPoint.y, 12);
+    this.rallyGraphics.lineStyle(2, 0x67e4e9, 0.92);
+    this.rallyGraphics.strokeCircle(rallyPoint.x, rallyPoint.y, 12);
+    this.rallyGraphics.lineBetween(rallyPoint.x, rallyPoint.y - 13, rallyPoint.x, rallyPoint.y + 10);
+    this.rallyGraphics.fillStyle(0x9a5cff, 0.92);
+    this.rallyGraphics.fillTriangle(rallyPoint.x + 1, rallyPoint.y - 12, rallyPoint.x + 13, rallyPoint.y - 7, rallyPoint.x + 1, rallyPoint.y - 2);
+  }
+
   private updatePlacementPreviewSprite(type: BuildingType, tile: TileCoord, valid: boolean): void {
     const textureKey = buildingStaticAssetKeyForType(type, true, this.simulation.state.players[PLAYER_ID].age);
     if (!textureKey) {
@@ -1359,6 +1659,12 @@ export class WorldScene extends Phaser.Scene {
       .find((entity) => entity?.building && entity.ownerId === PLAYER_ID && (!type || entity.building.type === type));
   }
 
+  private getSelectedProducerBuilding(): GameEntity | undefined {
+    return this.simulation.state.selection.selectedIds
+      .map((id) => this.simulation.state.entities[id])
+      .find((entity) => entity?.producer && entity.building?.completed && entity.ownerId === PLAYER_ID);
+  }
+
   private updateCursor(): void {
     if (this.isPanning) {
       this.setCursor("grabbing");
@@ -1383,6 +1689,10 @@ export class WorldScene extends Phaser.Scene {
 
     const selectedUnits = this.selectedUnitIds();
     if (selectedUnits.length === 0) {
+      if (this.getSelectedProducerBuilding()) {
+        this.setCursor("crosshair");
+        return;
+      }
       this.setCursor("default");
       return;
     }
@@ -1412,7 +1722,7 @@ export class WorldScene extends Phaser.Scene {
     this.input.setDefaultCursor(cursor);
   }
 
-  private showCommandIndicator(point: Vec2, kind: "move" | "attack" | "gather" | "build"): void {
+  private showCommandIndicator(point: Vec2, kind: "move" | "attack" | "gather" | "build" | "rally"): void {
     const graphics = this.add.graphics();
     graphics.setPosition(point.x, point.y);
     graphics.setDepth(20_000);
@@ -1443,6 +1753,15 @@ export class WorldScene extends Phaser.Scene {
         graphics.strokeRect(-12, -9, 24, 18);
         graphics.lineBetween(-14, -9, 0, -18);
         graphics.lineBetween(0, -18, 14, -9);
+        break;
+      case "rally":
+        graphics.fillStyle(0x67e4e9, 0.14);
+        graphics.fillCircle(0, 0, 12);
+        graphics.lineStyle(2, 0x67e4e9, 0.95);
+        graphics.strokeCircle(0, 0, 12);
+        graphics.lineBetween(0, -14, 0, 9);
+        graphics.fillStyle(0x9a5cff, 0.9);
+        graphics.fillTriangle(1, -13, 13, -8, 1, -3);
         break;
       case "move":
       default:
@@ -1510,6 +1829,36 @@ function terrainKindForChunk(map: MapState, startX: number, startY: number): Til
   return counts.grassDark > counts.grass ? "grassDark" : "grass";
 }
 
+function shouldLetVisualDecalCover(tile: TileType, startX: number, startY: number): boolean {
+  return (
+    isDirtLike(tile) ||
+    (isStoneQuarryDecalArea(startX, startY) && isStoneQuarryCoveredTile(tile)) ||
+    (isCrystalFieldDecalArea(startX, startY) && tile === "crystalGround")
+  );
+}
+
+function shouldSkipVisualDecalTransitions(kind: TileType, neighbors: NeighboringTerrain, startX: number, startY: number): boolean {
+  if (isDirtLike(kind) || Object.values(neighbors).some(isDirtLike)) {
+    return true;
+  }
+  if (isStoneQuarryDecalArea(startX, startY) && (isStoneQuarryCoveredTile(kind) || Object.values(neighbors).some(isStoneQuarryCoveredTile))) {
+    return true;
+  }
+  return isCrystalFieldDecalArea(startX, startY) && (kind === "crystalGround" || Object.values(neighbors).some((tile) => tile === "crystalGround"));
+}
+
+function isStoneQuarryDecalArea(startX: number, startY: number): boolean {
+  const centerX = startX + TERRAIN_STAMP_TILES / 2;
+  const centerY = startY + TERRAIN_STAMP_TILES / 2;
+  return centerX >= 78 && centerX <= 128 && centerY >= 24 && centerY <= 70;
+}
+
+function isCrystalFieldDecalArea(startX: number, startY: number): boolean {
+  const centerX = startX + TERRAIN_STAMP_TILES / 2;
+  const centerY = startY + TERRAIN_STAMP_TILES / 2;
+  return centerX >= 88 && centerX <= 128 && centerY >= 80 && centerY <= 126;
+}
+
 function isGrassLike(tile: TileType): boolean {
   return tile === "grass" || tile === "grassDark";
 }
@@ -1520,6 +1869,10 @@ function isDirtLike(tile: TileType): boolean {
 
 function isStoneLike(tile: TileType): boolean {
   return tile === "stoneGround";
+}
+
+function isStoneQuarryCoveredTile(tile: TileType): boolean {
+  return tile === "stoneGround" || tile === "dirt";
 }
 
 function rotationForSide(baseSide: CardinalSide, targetSide: CardinalSide): number {
@@ -1912,20 +2265,20 @@ function hasNearbyTile(map: MapState, x: number, y: number, matches: (tile: Tile
 
 function villageDecorLayout(): DecorPlacement[] {
   return [
-    { tileX: 44, tileY: 52, key: assetKeys.aobMap.sign, maxSize: 28, originY: 0.92 },
-    { tileX: 45, tileY: 61, key: assetKeys.aobMap.fence, maxSize: 34, originY: 0.9 },
-    { tileX: 44, tileY: 62, key: assetKeys.aobMap.fenceCorner, maxSize: 34, originY: 0.9 },
+    { tileX: 44, tileY: 52, key: assetKeys.aobMap.solanaBannerSmall, maxSize: 48, originY: 0.96 },
+    { tileX: 45, tileY: 61, key: assetKeys.aobMap.solanaFenceShort, maxSize: 52, originY: 0.9 },
+    { tileX: 44, tileY: 62, key: assetKeys.aobMap.solanaFenceCorner, maxSize: 52, originY: 0.9 },
     { tileX: 47, tileY: 64, key: assetKeys.aobMap.bench, maxSize: 32, originY: 0.9 },
-    { tileX: 50, tileY: 49, key: assetKeys.aobMap.sacks, maxSize: 30, originY: 0.9 },
-    { tileX: 50, tileY: 60, key: assetKeys.aobMap.crates, maxSize: 30, originY: 0.9 },
+    { tileX: 50, tileY: 49, key: assetKeys.aobMap.solanaSacks, maxSize: 50, originY: 0.9 },
+    { tileX: 50, tileY: 60, key: assetKeys.aobMap.solanaCratesStack, maxSize: 52, originY: 0.9 },
     { tileX: 58, tileY: 66, key: assetKeys.aobMap.trough, maxSize: 34, originY: 0.9 },
-    { tileX: 63, tileY: 49, key: assetKeys.aobMap.torch, maxSize: 32, originY: 0.93 },
-    { tileX: 64, tileY: 60, key: assetKeys.aobMap.barrels, maxSize: 30, originY: 0.9 },
+    { tileX: 63, tileY: 49, key: assetKeys.aobMap.solanaLanternPost, maxSize: 44, originY: 0.97 },
+    { tileX: 64, tileY: 60, key: assetKeys.aobMap.solanaBarrels, maxSize: 48, originY: 0.9 },
     { tileX: 42, tileY: 55, key: assetKeys.aobMap.woodPile, maxSize: 38, originY: 0.9 },
     { tileX: 83, tileY: 44, key: assetKeys.aobMap.cart, maxSize: 34, originY: 0.9 },
-    { tileX: 88, tileY: 46, key: assetKeys.aobMap.flag, maxSize: 30, originY: 0.94 },
+    { tileX: 88, tileY: 46, key: assetKeys.aobMap.solanaBannerTall, maxSize: 58, originY: 0.97 },
     { tileX: 89, tileY: 79, key: assetKeys.aobMap.well, maxSize: 34, originY: 0.9 },
-    { tileX: 95, tileY: 80, key: assetKeys.aobMap.anvil, maxSize: 30, originY: 0.9 },
+    { tileX: 95, tileY: 80, key: assetKeys.aobMap.solanaValidatorObelisk, maxSize: 58, originY: 0.96 },
     { tileX: 101, tileY: 62, key: assetKeys.aobMap.logStack, maxSize: 38, originY: 0.9 },
   ];
 }

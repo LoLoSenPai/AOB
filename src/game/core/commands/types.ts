@@ -1,5 +1,6 @@
 import type { AgeId, PlayerId } from "../../data/constants";
 import type { BuildingType, EntityId, UnitType } from "../entities/types";
+import type { Vec2 } from "../state/types";
 
 export type CommandBase = {
   playerId: PlayerId;
@@ -55,6 +56,12 @@ export type TrainUnitCommand = CommandBase & {
   unitType: UnitType;
 };
 
+export type SetRallyPointCommand = CommandBase & {
+  type: "setRallyPoint";
+  buildingId: EntityId;
+  target: Vec2;
+};
+
 export type GatherResourceCommand = CommandBase & {
   type: "gatherResource";
   unitIds: EntityId[];
@@ -94,6 +101,7 @@ export type GameCommand =
   | BuildWallLineCommand
   | AssignBuildersCommand
   | TrainUnitCommand
+  | SetRallyPointCommand
   | GatherResourceCommand
   | AttackTargetCommand
   | QueueResearchCommand

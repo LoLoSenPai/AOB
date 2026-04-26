@@ -49,6 +49,10 @@ export type GameMessage = {
   text: string;
 };
 
+export type ObjectiveProgressState = {
+  completedIds: string[];
+};
+
 export type GameState = {
   tick: number;
   nextEntityNumber: number;
@@ -59,6 +63,7 @@ export type GameState = {
   entities: Record<EntityId, GameEntity>;
   selection: SelectionState;
   messages: GameMessage[];
+  objectives: ObjectiveProgressState;
 };
 
 export function getTileIndex(map: MapState, x: number, y: number): number {

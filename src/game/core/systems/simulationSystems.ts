@@ -1,6 +1,7 @@
 import { ENEMY_ID, PLAYER_ID, TILE_SIZE } from "../../data/constants";
 import { ageConfigs, buildingConfigs, maxHealthForBuilding, resourceConfigs, unitConfigs } from "../../data/definitions";
 import type { EntityId, GameEntity } from "../entities/types";
+import { completedObjectiveIdsInOrder, objectiveTitle } from "../selectors/objectives";
 import { createUnit } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
 import type { GameState, TileCoord } from "../state/types";
@@ -26,6 +27,7 @@ export function runSimulationSystems(state: GameState): void {
   runProductionSystem(state);
   runCombatSystem(state);
   runProgressionSystem(state);
+  runObjectiveSystem(state);
   runCleanupSystem(state);
 }
 
@@ -408,9 +410,22 @@ function runProductionSystem(state: GameState): void {
       continue;
     }
     const unit = createUnit(state, item.unitType, PLAYER_ID, tileCenter(spawnTile));
+    assignProducedUnitToRally(state, building, unit);
     state.entities[unit.id] = unit;
     building.producer.queue.shift();
     addMessage(state, `${unitConfigs[item.unitType].label} trained.`);
+  }
+}
+
+function assignProducedUnitToRally(state: GameState, building: GameEntity, unit: GameEntity): void {
+  const rallyPoint = building.producer?.rallyPoint;
+  if (!rallyPoint || !unit.mobile) {
+    return;
+  }
+  unit.mobile.target = { ...rallyPoint };
+  unit.mobile.path = findPath(state, unit.position, rallyPoint);
+  if (unit.mobile.path.length > 0) {
+    unit.visualState = "walking";
   }
 }
 
@@ -504,6 +519,17 @@ function runProgressionSystem(state: GameState): void {
     upgradePlayerBuildingsForAge(state, PLAYER_ID);
     addMessage(state, `Age advanced: ${ageConfigs[player.age].label}.`);
     delete player.ageProgress;
+  }
+}
+
+function runObjectiveSystem(state: GameState): void {
+  const completedIds = completedObjectiveIdsInOrder(state);
+  for (const id of completedIds) {
+    if (state.objectives.completedIds.includes(id)) {
+      continue;
+    }
+    state.objectives.completedIds.push(id);
+    addMessage(state, `Objective complete: ${objectiveTitle(id)}.`);
   }
 }
 
