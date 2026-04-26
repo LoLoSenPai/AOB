@@ -42,6 +42,7 @@ export function createInitialState(): GameState {
       selectedIds: [],
     },
     messages: [],
+    combatEvents: [],
     objectives: {
       completedIds: [],
     },

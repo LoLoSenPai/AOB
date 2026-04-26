@@ -1,18 +1,18 @@
 :root {
   color-scheme: dark;
   font-family: "Trebuchet MS", "Verdana", sans-serif;
-  --hud-bg: rgba(17, 15, 14, 0.96);
-  --hud-bg-deep: rgba(6, 8, 10, 0.96);
-  --hud-bg-soft: rgba(45, 34, 27, 0.92);
-  --hud-border: #b9823d;
-  --hud-border-dim: rgba(174, 122, 56, 0.54);
-  --hud-accent: #e8bd63;
-  --hud-solana: #67e4e9;
+  --hud-bg: rgba(29, 27, 22, 0.97);
+  --hud-bg-deep: rgba(10, 12, 13, 0.97);
+  --hud-bg-soft: rgba(50, 43, 31, 0.94);
+  --hud-border: #d3aa5f;
+  --hud-border-dim: rgba(211, 170, 95, 0.5);
+  --hud-accent: #edc76c;
+  --hud-solana: #65dfe5;
   --hud-solana-purple: #9a5cff;
-  --hud-good: #82c65c;
+  --hud-good: #7bd15f;
   --hud-bad: #d86a54;
-  --hud-text: #f6e4bb;
-  --hud-muted: #c9a976;
+  --hud-text: #fff0c4;
+  --hud-muted: #d7bf86;
 }
 
 * {
@@ -27,7 +27,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #26351f;
+  background: #2c462f;
 }
 
 canvas {
@@ -53,11 +53,11 @@ canvas {
   gap: 14px;
   padding: 4px 12px;
   background:
-    linear-gradient(180deg, rgba(23, 25, 26, 0.98), rgba(8, 10, 12, 0.98)),
-    radial-gradient(circle at 8% 0%, rgba(103, 228, 233, 0.16), transparent 30%),
-    radial-gradient(circle at 92% 0%, rgba(154, 92, 255, 0.12), transparent 32%);
-  border-bottom: 1px solid rgba(211, 161, 78, 0.86);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.68), inset 0 -1px 0 rgba(255, 226, 153, 0.08);
+    linear-gradient(180deg, rgba(40, 45, 30, 0.98), rgba(14, 18, 17, 0.98)),
+    radial-gradient(circle at 8% 0%, rgba(101, 223, 229, 0.14), transparent 30%),
+    radial-gradient(circle at 92% 0%, rgba(154, 92, 255, 0.1), transparent 32%);
+  border-bottom: 2px solid rgba(217, 183, 101, 0.9);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.46), inset 0 -1px 0 rgba(255, 241, 186, 0.12);
   font-size: 14px;
 }
 
@@ -86,9 +86,9 @@ canvas {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #161719, #08090a);
-  border: 1px solid rgba(229, 180, 82, 0.7);
-  box-shadow: inset 0 0 0 1px rgba(103, 228, 233, 0.12), 0 2px 0 rgba(0, 0, 0, 0.5);
+  background: linear-gradient(180deg, #334329, #18221d);
+  border: 1px solid rgba(240, 206, 109, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(101, 223, 229, 0.1), 0 2px 0 rgba(0, 0, 0, 0.36);
 }
 
 .hud-crest-img {
@@ -132,8 +132,8 @@ canvas {
   min-width: 86px;
   padding: 0 9px;
   background: linear-gradient(180deg, rgba(14, 16, 17, 0.88), rgba(5, 6, 7, 0.72));
-  border: 1px solid rgba(198, 153, 74, 0.46);
-  box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.05), inset 0 -2px 0 rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(217, 183, 101, 0.54);
+  box-shadow: inset 0 0 0 1px rgba(255, 241, 186, 0.06), inset 0 -2px 0 rgba(0, 0, 0, 0.32), 0 1px 0 rgba(0, 0, 0, 0.5);
   white-space: nowrap;
 }
 
@@ -162,7 +162,7 @@ canvas {
   width: 22px;
   height: 22px;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
 }
 
@@ -214,9 +214,9 @@ canvas {
   gap: 8px;
   max-width: min(470px, calc(100vw - 360px));
   padding: 6px 9px;
-  background: rgba(9, 11, 12, 0.82);
-  border: 1px solid rgba(198, 153, 74, 0.52);
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 226, 153, 0.05);
+  background: rgba(23, 34, 27, 0.84);
+  border: 1px solid rgba(217, 183, 101, 0.52);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), inset 0 0 0 1px rgba(255, 241, 186, 0.05);
   color: var(--hud-muted);
   font-size: 12px;
   line-height: 1;
@@ -234,10 +234,10 @@ canvas {
   width: 318px;
   padding: 9px 10px 10px;
   background:
-    linear-gradient(180deg, rgba(25, 21, 18, 0.94), rgba(7, 9, 10, 0.94)),
-    radial-gradient(circle at 100% 0%, rgba(103, 228, 233, 0.12), transparent 40%);
-  border: 1px solid rgba(198, 153, 74, 0.7);
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px rgba(255, 226, 153, 0.06);
+    linear-gradient(180deg, rgba(45, 39, 28, 0.96), rgba(13, 18, 18, 0.96)),
+    radial-gradient(circle at 100% 0%, rgba(101, 223, 229, 0.1), transparent 40%);
+  border: 1px solid rgba(217, 183, 101, 0.72);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(255, 241, 186, 0.06), inset 0 0 22px rgba(0, 0, 0, 0.28);
   pointer-events: none;
 }
 
@@ -328,11 +328,22 @@ canvas {
   transform: translateX(-50%);
   padding: 11px 14px 13px;
   background:
-    linear-gradient(180deg, rgba(30, 25, 20, 0.98), rgba(10, 10, 10, 0.98)),
-    radial-gradient(circle at 92% 8%, rgba(103, 228, 233, 0.14), transparent 28%);
-  border: 1px solid rgba(198, 153, 74, 0.82);
-  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.52), inset 0 0 0 1px rgba(255, 226, 153, 0.08), inset 0 0 26px rgba(0, 0, 0, 0.24);
+    linear-gradient(180deg, rgba(54, 45, 32, 0.99), rgba(15, 17, 17, 0.99)),
+    radial-gradient(circle at 92% 8%, rgba(101, 223, 229, 0.12), transparent 28%);
+  border: 2px solid rgba(217, 183, 101, 0.82);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 241, 186, 0.08), inset 0 0 26px rgba(0, 0, 0, 0.18);
   pointer-events: auto;
+}
+
+.hud-bottom-panel::before,
+.command-dock::before,
+.hud-minimap::before,
+.objective-panel::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 226, 153, 0.12);
+  pointer-events: none;
 }
 
 .hud-alert {
@@ -367,16 +378,18 @@ canvas {
 }
 
 .selection-portrait {
-  width: 72px;
-  height: 58px;
+  width: 84px;
+  height: 68px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 35%, rgba(76, 58, 45, 0.92), rgba(10, 11, 12, 0.96));
-  border: 1px solid rgba(198, 153, 74, 0.62);
-  box-shadow: inset 0 0 0 1px rgba(103, 228, 233, 0.08), inset 0 -4px 0 rgba(0, 0, 0, 0.28);
+  background:
+    radial-gradient(circle at 50% 38%, rgba(83, 61, 43, 0.9), rgba(10, 11, 12, 0.96) 68%),
+    linear-gradient(180deg, rgba(111, 83, 45, 0.24), rgba(0, 0, 0, 0.2));
+  border: 2px solid rgba(198, 153, 74, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.12), inset 0 -5px 0 rgba(0, 0, 0, 0.32), 0 2px 0 rgba(0, 0, 0, 0.46);
 }
 
 .selection-portrait img {
@@ -393,6 +406,62 @@ canvas {
   font-size: 24px;
   font-weight: 800;
   text-shadow: 0 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.unit-sprite {
+  display: inline-block;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.62));
+}
+
+.selection-portrait-sprite {
+  width: 60px;
+  height: 60px;
+}
+
+.selection-portrait-sprite.unit-sprite--worker {
+  width: 64px;
+  height: 64px;
+}
+
+.selection-portrait-sprite.unit-sprite--soldier,
+.selection-portrait-sprite.unit-sprite--archer {
+  width: 64px;
+  height: 64px;
+}
+
+.command-unit-icon {
+  width: 46px;
+  height: 42px;
+  margin-bottom: -1px;
+}
+
+.command-unit-icon.unit-sprite--worker {
+  width: 38px;
+  height: 34px;
+}
+
+.queue-unit-icon {
+  width: 30px;
+  height: 30px;
+}
+
+.queue-unit-icon.unit-sprite--worker {
+  width: 26px;
+  height: 26px;
+}
+
+.unit-sprite--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.38);
+  border: 1px solid rgba(198, 153, 74, 0.44);
+  color: #ffe0a0;
+  font-weight: 800;
 }
 
 .hud-panel-heading {
@@ -495,7 +564,7 @@ canvas {
 .queue-item {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 30px 1fr auto;
   gap: 8px;
   min-height: 22px;
   align-items: center;
@@ -545,10 +614,10 @@ canvas {
   min-height: 156px;
   padding: 10px;
   background:
-    linear-gradient(180deg, rgba(28, 23, 19, 0.98), rgba(8, 9, 10, 0.98)),
-    radial-gradient(circle at 12% 0%, rgba(154, 92, 255, 0.12), transparent 35%);
-  border: 1px solid rgba(198, 153, 74, 0.78);
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.46), inset 0 0 0 1px rgba(255, 226, 153, 0.08), inset 0 0 24px rgba(0, 0, 0, 0.22);
+    linear-gradient(180deg, rgba(52, 43, 31, 0.99), rgba(13, 18, 18, 0.99)),
+    radial-gradient(circle at 12% 0%, rgba(154, 92, 255, 0.1), transparent 35%);
+  border: 2px solid rgba(217, 183, 101, 0.78);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(255, 241, 186, 0.08), inset 0 0 24px rgba(0, 0, 0, 0.18);
   pointer-events: auto;
 }
 
@@ -584,6 +653,7 @@ canvas {
 }
 
 .command-button {
+  position: relative;
   min-height: 58px;
   display: flex;
   flex-direction: column;
@@ -592,13 +662,21 @@ canvas {
   gap: 4px;
   border: 1px solid rgba(198, 153, 74, 0.58);
   background:
-    linear-gradient(180deg, rgba(75, 55, 40, 0.95), rgba(32, 28, 25, 0.98)),
-    radial-gradient(circle at 50% 0%, rgba(103, 228, 233, 0.1), transparent 55%);
+    linear-gradient(180deg, rgba(86, 68, 41, 0.98), rgba(30, 34, 27, 0.98)),
+    radial-gradient(circle at 50% 0%, rgba(101, 223, 229, 0.08), transparent 55%);
   color: var(--hud-text);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
   box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.06), inset 0 -3px 0 rgba(0, 0, 0, 0.28);
+}
+
+.command-button::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 226, 153, 0.08);
+  pointer-events: none;
 }
 
 .command-icon {
@@ -646,7 +724,7 @@ canvas {
   width: 15px;
   height: 15px;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
 }
 
@@ -711,10 +789,10 @@ canvas {
   height: 172px;
   padding: 8px;
   background:
-    linear-gradient(180deg, rgba(24, 20, 16, 0.98), rgba(6, 7, 8, 0.98)),
-    radial-gradient(circle at 32% 28%, rgba(103, 228, 233, 0.12), transparent 48%);
-  border: 1px solid rgba(198, 153, 74, 0.8);
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.46), inset 0 0 0 1px rgba(255, 226, 153, 0.08);
+    linear-gradient(180deg, rgba(48, 40, 30, 0.98), rgba(12, 18, 18, 0.98)),
+    radial-gradient(circle at 32% 28%, rgba(101, 223, 229, 0.1), transparent 48%);
+  border: 2px solid rgba(217, 183, 101, 0.78);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.38), inset 0 0 0 1px rgba(255, 241, 186, 0.08);
   pointer-events: none;
 }
 

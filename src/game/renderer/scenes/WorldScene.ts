@@ -22,9 +22,9 @@ import type { BuildingType, EntityId, GameEntity } from "../../core/entities/typ
 import { idleWorkerIdsForPlayer, workerTaskCountsForPlayer } from "../../core/selectors/economy";
 import { objectiveViewsForState } from "../../core/selectors/objectives";
 import { Simulation } from "../../core/simulation/Simulation";
-import type { MapState, ResourceStock, TileCoord, TileType, Vec2 } from "../../core/state/types";
+import type { CombatEvent, MapState, ResourceStock, TileCoord, TileType, Vec2 } from "../../core/state/types";
 import { worldToTile } from "../../core/systems/mapQueries";
-import { canPlaceBuildingAt, canPlaceWallLineAt } from "../../core/systems/simulationSystems";
+import { canPlaceBuildingAt, canPlaceWallSegmentsAt } from "../../core/systems/simulationSystems";
 import { wallLineSegments, type WallLineSegment } from "../../core/systems/wallPlacement";
 import { registerAnimations } from "../world/AnimationRegistry";
 import { HudController, type HudRenderContext } from "../ui/HudController";
@@ -33,12 +33,16 @@ type EntityView = {
   container: Phaser.GameObjects.Container;
   ground?: Phaser.GameObjects.TileSprite;
   sprites: Phaser.GameObjects.Sprite[];
+  smoke?: Phaser.GameObjects.Sprite;
   graphics?: Phaser.GameObjects.Graphics;
   selection: Phaser.GameObjects.Graphics;
   health: Phaser.GameObjects.Graphics;
-  animationFamily?: "human" | "goblin" | "skeleton";
+  selectionCorners?: Phaser.GameObjects.Image[];
+  animationFamily?: "human" | "tinySoldier" | "tinyArcher" | "goblin" | "skeleton";
   lastAnimation?: string;
-  lastBuildingTexture?: string;
+  lastBuildingSignature?: string;
+  lastBuildingCompleted?: boolean;
+  completionEffectStartedAt?: number;
   staticBuildingType?: BuildingType;
   facingX?: -1 | 1;
 };
@@ -60,11 +64,64 @@ type WallVisual = {
   flipY?: boolean;
 };
 
+type WallDraft = {
+  points: TileCoord[];
+};
+
 const TERRAIN_BASE_DEPTH = -1000;
 const TERRAIN_TRANSITION_DEPTH = -950;
 const UNIT_SPRITE_SCALE = 1.28;
 const UNIT_SPRITE_ORIGIN_Y = 0.61;
+const TINY_COMBAT_SPRITE_SCALE = 1.45;
 const GROUND_PAD_DEPTH = -875;
+const USE_SUNNYSIDE_TERRAIN = false;
+const USE_SUNNYSIDE_BUILDINGS = false;
+const USE_BUILDING_GROUND_PADS = false;
+const USE_BUILDING_SMOKE = USE_SUNNYSIDE_BUILDINGS;
+const USE_BUILDING_COMPLETION_BOUNCE = USE_SUNNYSIDE_BUILDINGS;
+const SUNNYSIDE_CURSOR_CSS: Record<string, string> = {
+  default: 'url("/assets/sunnyside/ui/cursor_01.png") 0 0, default',
+  pointer: 'url("/assets/sunnyside/ui/cursor_02.png") 0 0, pointer',
+  copy: 'url("/assets/sunnyside/ui/cursor_03.png") 0 0, copy',
+  cell: 'url("/assets/sunnyside/ui/cursor_04.png") 0 0, cell',
+  crosshair: 'url("/assets/sunnyside/ui/cursor_05.png") 0 0, crosshair',
+};
+
+type SunnysideTerrainKind = "grass" | "dirt" | "waterEdge" | "waterDeep" | "stone" | "crystal";
+
+type BuildingSpriteDef = {
+  key: string;
+  frame?: string | number;
+  maxSize: number;
+  originX: number;
+  originY: number;
+  x?: number;
+  y: number;
+  alpha?: number;
+};
+
+type SunnysideBuildingPartDef = Omit<BuildingSpriteDef, "y"> & {
+  yOffset?: number;
+};
+
+type SunnysideBuildingBlueprint = {
+  parts: SunnysideBuildingPartDef[];
+  visualSize: number;
+};
+
+type BuildingSmokeDef = {
+  xFactor: number;
+  yFactor: number;
+  maxSize: number;
+  alpha: number;
+};
+
+const SUNNYSIDE_GRASS_FRAMES = [65, 66, 129, 130, 131, 132, 133, 134, 192, 193, 194, 195, 196, 197, 198, 199, 257, 258, 259, 328, 329];
+const SUNNYSIDE_DIRT_FRAMES = [457, 458, 459, 521, 522];
+const SUNNYSIDE_WATER_EDGE_FRAMES = [542, 543, 544, 545];
+const SUNNYSIDE_WATER_DEEP_FRAMES = [1163, 1164, 1165, 1166, 1227, 1228, 1229, 1230, 1291, 1292, 1293, 1294];
+const SUNNYSIDE_STONE_FRAMES = [961, 962, 963, 964, 965, 969, 970, 973, 974, 1025, 1029, 1032, 1033, 1034, 1035, 1036, 1037, 1038];
+const SUNNYSIDE_CRYSTAL_GROUND_FRAMES = [457, 458, 459, 521, 522, 532, 533];
 
 export class WorldScene extends Phaser.Scene {
   private simulation!: Simulation;
@@ -79,7 +136,7 @@ export class WorldScene extends Phaser.Scene {
   private placementPreviewSprite?: Phaser.GameObjects.Sprite;
   private readonly wallPreviewSprites: Phaser.GameObjects.Sprite[] = [];
   private placementType?: BuildingType;
-  private wallLineStartTile?: TileCoord;
+  private wallDraft?: WallDraft;
   private buildMenuOpen = false;
   private previousSelectedIds = new Set<EntityId>();
   private hoveredEntityId?: EntityId;
@@ -88,7 +145,9 @@ export class WorldScene extends Phaser.Scene {
   private panLastScreen?: Vec2;
   private currentCursor = "";
   private solanaAtlasFramesRegistered = false;
+  private sunnysideFramesRegistered = false;
   private nextIdleWorkerIndex = 0;
+  private lastCombatEventId = -1;
 
   constructor() {
     super("WorldScene");
@@ -98,6 +157,9 @@ export class WorldScene extends Phaser.Scene {
     registerAnimations(this);
     this.simulation = new Simulation();
     this.configureTerrainTextureFilters();
+    if (USE_SUNNYSIDE_BUILDINGS) {
+      this.registerSunnysideFrames();
+    }
     this.createTerrain();
     this.createMapDecor();
     this.createInput();
@@ -199,6 +261,37 @@ export class WorldScene extends Phaser.Scene {
     ]) {
       this.textures.get(key).setFilter(Phaser.Textures.FilterMode.LINEAR);
     }
+    for (const key of [
+      assetKeys.tiles,
+      assetKeys.forest,
+      assetKeys.elements.tree1,
+      assetKeys.elements.tree2,
+      assetKeys.elements.rock,
+      assetKeys.elements.wood,
+      assetKeys.elements.wheat,
+      assetKeys.elements.carrot,
+      assetKeys.elements.soil,
+      assetKeys.elements.windmill,
+      assetKeys.elements.fire,
+      assetKeys.elements.smoke,
+      assetKeys.tinyRpg.soldier.idle,
+      assetKeys.tinyRpg.soldier.walk,
+      assetKeys.tinyRpg.soldier.attack,
+      assetKeys.tinyRpg.soldier.hurt,
+      assetKeys.tinyRpg.soldier.death,
+      assetKeys.tinyRpg.archer.idle,
+      assetKeys.tinyRpg.archer.walk,
+      assetKeys.tinyRpg.archer.attack,
+      assetKeys.tinyRpg.archer.hurt,
+      assetKeys.tinyRpg.archer.death,
+      assetKeys.tinyRpg.arrow,
+      assetKeys.ui.selectBoxTl,
+      assetKeys.ui.selectBoxTr,
+      assetKeys.ui.selectBoxBl,
+      assetKeys.ui.selectBoxBr,
+    ]) {
+      this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    }
   }
 
   update(_time: number, delta: number): void {
@@ -206,6 +299,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateCamera(delta);
     this.updateHoverTarget();
     this.syncEntityViews();
+    this.playCombatEvents();
     this.updateSelectionPulse();
     this.updatePlacementPreview();
     this.updateRallyMarker();
@@ -217,6 +311,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createTerrain(): void {
+    if (USE_SUNNYSIDE_TERRAIN) {
+      this.createSunnysideTerrain();
+      return;
+    }
+
     const state = this.simulation.state;
     const chunkSize = TERRAIN_STAMP_TILES * TILE_SIZE;
     const worldWidth = state.map.width * TILE_SIZE;
@@ -250,6 +349,29 @@ export class WorldScene extends Phaser.Scene {
 
     this.createTerrainTransitions(state, chunkSize);
     this.createVisualOverlays();
+  }
+
+  private createSunnysideTerrain(): void {
+    this.registerSunnysideFrames();
+    const state = this.simulation.state;
+    const data: number[][] = [];
+
+    for (let y = 0; y < state.map.height; y += 1) {
+      const row: number[] = [];
+      for (let x = 0; x < state.map.width; x += 1) {
+        const tile = state.map.tiles[y * state.map.width + x] ?? "grass";
+        const kind = sunnysideTerrainKindForTile(state.map, tile, x, y);
+        row.push(sunnysideTerrainFrameForKind(kind, x, y));
+      }
+      data.push(row);
+    }
+
+    const map = this.make.tilemap({ data, tileWidth: TILE_SIZE, tileHeight: TILE_SIZE });
+    const tileset = map.addTilesetImage(assetKeys.tiles, assetKeys.tiles, TILE_SIZE, TILE_SIZE, 0, 0);
+    if (!tileset) {
+      return;
+    }
+    map.createLayer(0, tileset, 0, 0)?.setDepth(TERRAIN_BASE_DEPTH);
   }
 
   private createTerrainTransitions(state: Simulation["state"], chunkSize: number): void {
@@ -354,6 +476,14 @@ export class WorldScene extends Phaser.Scene {
     for (const overlay of initialMapLayout.visualOverlays) {
       this.addVisualOverlay(overlay);
     }
+  }
+
+  private registerSunnysideFrames(): void {
+    if (this.sunnysideFramesRegistered) {
+      return;
+    }
+    this.registerAtlasFrames(assetKeys.tiles, sunnysideBuildingFrames);
+    this.sunnysideFramesRegistered = true;
   }
 
   private registerSolanaAtlasFrames(): void {
@@ -479,7 +609,7 @@ export class WorldScene extends Phaser.Scene {
         .fillEllipse(0, 3, decor.maxSize * 0.72, Math.max(8, decor.maxSize * 0.2));
     }
     const sprite = this.add
-      .image(worldX, worldY, decor.key)
+      .sprite(worldX, worldY, decor.key, decor.frame ?? decorFrameForKey(decor.key))
       .setOrigin(decor.originX ?? 0.5, decor.originY ?? 0.86)
       .setDepth(worldY + (decor.depthOffset ?? -2))
       .setAlpha(decor.alpha ?? 1);
@@ -488,7 +618,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createInput(): void {
-    this.keys = this.input.keyboard?.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,F,H,B,PERIOD") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.keys = this.input.keyboard?.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,F,H,B,PERIOD,ENTER") as Record<string, Phaser.Input.Keyboard.Key>;
     this.input.mouse?.disableContextMenu();
     this.setCursor("default");
 
@@ -502,7 +632,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       if (this.placementType === "wall") {
-        this.beginWallPlacementDrag(pointer);
+        this.clearSelectionDrag();
         return;
       }
       this.dragStartWorld = { x: pointer.worldX, y: pointer.worldY };
@@ -532,7 +662,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       if (button === 0 && this.placementType === "wall") {
-        this.confirmPlacement(pointer);
+        this.handleWallPlacementClick(pointer);
         return;
       }
       if (button === 0) {
@@ -555,7 +685,7 @@ export class WorldScene extends Phaser.Scene {
     this.hud = new HudController(root, {
       onBuildRequest: (buildingType) => {
         this.placementType = buildingType;
-        this.wallLineStartTile = undefined;
+        this.wallDraft = undefined;
         this.buildMenuOpen = false;
       },
       onOpenBuildMenu: () => {
@@ -568,6 +698,9 @@ export class WorldScene extends Phaser.Scene {
       },
       onCancelPlacement: () => {
         this.cancelPlacement();
+      },
+      onConfirmPlacement: () => {
+        this.confirmWallDraft();
       },
       onTrainRequest: (unitType) => {
         const selectedBuilding = this.getSelectedBuilding();
@@ -608,9 +741,12 @@ export class WorldScene extends Phaser.Scene {
 
   private createHudRenderContext(): HudRenderContext {
     const camera = this.cameras.main;
+    const wallDraftSegments = this.wallDraftPreviewSegments();
     return {
       placementType: this.placementType,
-      wallLineStarted: Boolean(this.wallLineStartTile),
+      wallLineStarted: Boolean(this.wallDraft),
+      wallSegmentCount: wallDraftSegments.length,
+      wallPlacementCanConfirm: Boolean(this.wallDraft) && wallDraftSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallDraftSegments),
       buildMenuOpen: this.buildMenuOpen,
       camera: {
         x: Math.max(0, camera.scrollX),
@@ -664,6 +800,16 @@ export class WorldScene extends Phaser.Scene {
           completedWalls: entities.filter((entity) => entity.building?.type === "wall" && entity.building.completed).length,
         },
         workerTasks: workerTaskCountsForPlayer(state),
+        wallDraft: this.wallDraft
+          ? {
+              points: this.wallDraft.points,
+              segments: this.wallDraftPreviewSegments().map((segment) => ({
+                tile: segment.tile,
+                footprint: segment.footprint,
+                direction: segment.direction,
+              })),
+            }
+          : undefined,
         objectives: objectiveViewsForState(state).map((objective) => ({
           id: objective.id,
           status: objective.status,
@@ -717,11 +863,14 @@ export class WorldScene extends Phaser.Scene {
     }
     this.updateEdgeScroll(delta);
     if (Phaser.Input.Keyboard.JustDown(this.keys.ESC)) {
-      if (this.placementType || this.wallLineStartTile) {
+      if (this.placementType) {
         this.cancelPlacement();
       } else if (this.buildMenuOpen) {
         this.buildMenuOpen = false;
       }
+    }
+    if (Phaser.Input.Keyboard.JustDown(this.keys.ENTER) && this.placementType === "wall") {
+      this.confirmWallDraft();
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.H)) {
       this.selectTownCenter();
@@ -744,7 +893,7 @@ export class WorldScene extends Phaser.Scene {
 
   private cancelPlacement(): void {
     this.placementType = undefined;
-    this.wallLineStartTile = undefined;
+    this.wallDraft = undefined;
     this.placementGraphics?.clear();
     this.hidePlacementPreviewGround();
     this.hidePlacementPreviewSprite();
@@ -863,8 +1012,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateCursor();
   }
 
-  private beginWallPlacementDrag(pointer: Phaser.Input.Pointer): void {
-    this.wallLineStartTile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
+  private clearSelectionDrag(): void {
     this.dragStartWorld = undefined;
     this.dragStartScreen = undefined;
     this.dragGraphics?.clear();
@@ -946,28 +1094,33 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.add.sprite(0, 0, assetKeys.skeleton.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       sprites.push(sprite);
       animationFamily = "skeleton";
+    } else if (entity.unit?.type === "soldier") {
+      const sprite = this.add.sprite(0, 0, assetKeys.tinyRpg.soldier.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
+      sprites.push(sprite);
+      animationFamily = "tinySoldier";
+    } else if (entity.unit?.type === "archer") {
+      const sprite = this.add.sprite(0, 0, assetKeys.tinyRpg.archer.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
+      sprites.push(sprite);
+      animationFamily = "tinyArcher";
     } else {
       const base = this.add.sprite(0, 0, assetKeys.human.base.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       const hair = this.add.sprite(0, 0, assetKeys.human.hair.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
       const tools = this.add.sprite(0, 0, assetKeys.human.tools.idle, 0).setOrigin(0.5, UNIT_SPRITE_ORIGIN_Y);
-      if (entity.unit?.type === "soldier") {
-        base.setTint(0xf4d0b5);
-        hair.setTint(0xf2e2c7);
-        tools.setTint(0xd4e0ee);
-      }
       sprites.push(base, hair, tools);
     }
 
+    const spriteScale = animationFamily === "tinySoldier" || animationFamily === "tinyArcher" ? TINY_COMBAT_SPRITE_SCALE : UNIT_SPRITE_SCALE;
     for (const sprite of sprites) {
-      sprite.setScale(UNIT_SPRITE_SCALE);
+      sprite.setScale(spriteScale);
       container.add(sprite);
     }
 
     const selection = this.add.graphics();
     const health = this.add.graphics();
     container.add(selection);
+    const selectionCorners = this.createSelectionCorners(container);
     container.add(health);
-    return { container, sprites, selection, health, animationFamily };
+    return { container, sprites, selection, health, selectionCorners, animationFamily };
   }
 
   private createResourceView(entity: GameEntity): EntityView {
@@ -980,7 +1133,7 @@ export class WorldScene extends Phaser.Scene {
 
     const visual = resourceVisualFor(entity);
     if (visual) {
-      const sprite = this.add.sprite(visual.x, visual.y, visual.key).setOrigin(visual.originX, visual.originY);
+      const sprite = this.add.sprite(visual.x, visual.y, visual.key, visual.frame).setOrigin(visual.originX, visual.originY);
       setMaxDisplaySize(sprite, visual.maxSize);
       if (visual.tint) {
         sprite.setTint(visual.tint);
@@ -1003,8 +1156,9 @@ export class WorldScene extends Phaser.Scene {
     const selection = this.add.graphics();
     const health = this.add.graphics();
     container.add(selection);
+    const selectionCorners = this.createSelectionCorners(container);
     container.add(health);
-    return { container, sprites, selection, health };
+    return { container, sprites, selection, health, selectionCorners };
   }
 
   private createBuildingView(entity: GameEntity): EntityView {
@@ -1015,14 +1169,19 @@ export class WorldScene extends Phaser.Scene {
     const sprites: Phaser.GameObjects.Sprite[] = [];
 
     const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age : undefined;
-    const staticKey = buildingStaticAssetKey(entity, ownerAge ?? "genesis");
+    const staticDefs = buildingSpriteDefs(entity, ownerAge ?? "genesis");
     const buildingKey = buildingAssetKey(entity);
     let staticBuildingType: BuildingType | undefined;
-    if (staticKey) {
-      const sprite = this.add.sprite(0, buildingSpriteBaselineY(entity), staticKey).setOrigin(0.5, 1);
-      setMaxDisplaySize(sprite, buildingStaticVisualSize(entity, ownerAge));
-      sprites.push(sprite);
-      container.add(sprite);
+    if (staticDefs.length > 0) {
+      for (const staticDef of staticDefs) {
+        const sprite = this.add
+          .sprite(staticDef.x ?? 0, staticDef.y, staticDef.key, staticDef.frame)
+          .setOrigin(staticDef.originX, staticDef.originY)
+          .setAlpha(staticDef.alpha ?? 1);
+        setMaxDisplaySize(sprite, staticDef.maxSize);
+        sprites.push(sprite);
+        container.add(sprite);
+      }
       staticBuildingType = entity.building?.type;
     } else if (entity.building?.type === "wall") {
       const sprite = this.add.sprite(0, 0, assetKeys.aobWalls.palisadeHorizontal).setOrigin(0.5, 0.5);
@@ -1044,11 +1203,43 @@ export class WorldScene extends Phaser.Scene {
       container.add(flag);
     }
 
+    const smoke = this.add.sprite(0, 0, assetKeys.elements.smoke, 0).setOrigin(0.5, 1);
+    smoke.setVisible(false);
+    container.add(smoke);
+
     const selection = this.add.graphics();
     const health = this.add.graphics();
     container.add(selection);
+    const selectionCorners = this.createSelectionCorners(container);
     container.add(health);
-    return { container, ground, sprites, graphics, selection, health, staticBuildingType, lastBuildingTexture: staticKey };
+    return {
+      container,
+      ground,
+      sprites,
+      smoke,
+      graphics,
+      selection,
+      health,
+      selectionCorners,
+      staticBuildingType,
+      lastBuildingSignature: buildingSpriteSignature(staticDefs),
+      lastBuildingCompleted: entity.building?.completed,
+    };
+  }
+
+  private createSelectionCorners(container: Phaser.GameObjects.Container): Phaser.GameObjects.Image[] {
+    const corners = [
+      this.add.image(0, 0, assetKeys.ui.selectBoxTl).setOrigin(0, 0),
+      this.add.image(0, 0, assetKeys.ui.selectBoxTr).setOrigin(1, 0),
+      this.add.image(0, 0, assetKeys.ui.selectBoxBl).setOrigin(0, 1),
+      this.add.image(0, 0, assetKeys.ui.selectBoxBr).setOrigin(1, 1),
+    ];
+    for (const corner of corners) {
+      corner.setVisible(false);
+      corner.setScale(1.8);
+      container.add(corner);
+    }
+    return corners;
   }
 
   private updateEntityView(entity: GameEntity, view: EntityView): void {
@@ -1064,6 +1255,8 @@ export class WorldScene extends Phaser.Scene {
       this.updateBuildingGround(entity, view, ownerAge ?? "genesis");
       drawBuilding(view.graphics, entity, view.sprites.length > 0, ownerAge);
       this.updateBuildingSprites(entity, view, ownerAge);
+      this.updateBuildingSmoke(entity, view);
+      this.updateBuildingCompletionEffect(entity, view);
     }
     this.drawSelection(entity, view);
     this.drawHealth(entity, view);
@@ -1086,6 +1279,10 @@ export class WorldScene extends Phaser.Scene {
       }
       return;
     }
+    if (view.animationFamily === "tinySoldier" || view.animationFamily === "tinyArcher") {
+      view.sprites[0]?.play(`${view.animationFamily}-${tinyCombatAction(action)}`, true);
+      return;
+    }
     for (const sprite of view.sprites) {
       sprite.play(animationKey, true);
     }
@@ -1101,6 +1298,83 @@ export class WorldScene extends Phaser.Scene {
     for (const sprite of view.sprites) {
       sprite.setFlipX(facing < 0);
     }
+  }
+
+  private playCombatEvents(): void {
+    for (const event of this.simulation.state.combatEvents) {
+      if (event.id <= this.lastCombatEventId) {
+        continue;
+      }
+      if (event.kind === "arrow") {
+        this.playArrowProjectile(event);
+      } else {
+        this.playHitSpark(event.target, event.damage, false);
+      }
+      this.lastCombatEventId = Math.max(this.lastCombatEventId, event.id);
+    }
+  }
+
+  private playArrowProjectile(event: CombatEvent): void {
+    const source = { x: event.source.x, y: event.source.y - 26 };
+    const target = { x: event.target.x, y: event.target.y - 20 };
+    const distance = Phaser.Math.Distance.Between(source.x, source.y, target.x, target.y);
+    const arrow = this.add.image(source.x, source.y, assetKeys.tinyRpg.arrow).setOrigin(0.5, 0.5);
+    arrow.setDepth(Math.max(source.y, target.y) + 60);
+    arrow.setScale(0.9);
+    arrow.setRotation(Phaser.Math.Angle.Between(source.x, source.y, target.x, target.y));
+
+    this.tweens.add({
+      targets: arrow,
+      x: target.x,
+      y: target.y,
+      duration: Phaser.Math.Clamp(distance * 2.2, 130, 360),
+      ease: "Linear",
+      onComplete: () => {
+        arrow.destroy();
+        this.playHitSpark(target, event.damage, true);
+      },
+    });
+  }
+
+  private playHitSpark(point: Vec2, damage: number, ranged: boolean): void {
+    const graphics = this.add.graphics();
+    graphics.setPosition(point.x, point.y - 16);
+    graphics.setDepth(point.y + 72);
+    const color = ranged ? 0x7ff3ff : 0xffd66d;
+    graphics.fillStyle(color, ranged ? 0.2 : 0.16);
+    graphics.fillCircle(0, 0, ranged ? 9 : 7);
+    graphics.lineStyle(2, color, 0.9);
+    graphics.strokeCircle(0, 0, ranged ? 9 : 7);
+    graphics.lineBetween(-6, 0, 6, 0);
+    graphics.lineBetween(0, -6, 0, 6);
+
+    const label = this.add
+      .text(point.x, point.y - 30, `-${Math.ceil(damage)}`, {
+        fontFamily: "Trebuchet MS, Verdana, sans-serif",
+        fontSize: "12px",
+        color: ranged ? "#dffcff" : "#ffe0a0",
+        stroke: "#1b1210",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5, 0.5)
+      .setDepth(point.y + 74);
+
+    this.tweens.add({
+      targets: graphics,
+      alpha: 0,
+      scale: 1.8,
+      duration: 360,
+      ease: "Cubic.easeOut",
+      onComplete: () => graphics.destroy(),
+    });
+    this.tweens.add({
+      targets: label,
+      y: label.y - 14,
+      alpha: 0,
+      duration: 620,
+      ease: "Cubic.easeOut",
+      onComplete: () => label.destroy(),
+    });
   }
 
   private updateBuildingSprites(entity: GameEntity, view: EntityView, ownerAge: AgeId | undefined): void {
@@ -1157,30 +1431,131 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updateStaticBuildingSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
-    const sprite = view.sprites[0];
-    if (!sprite || !entity.building || !view.staticBuildingType) {
+    if (!entity.building || !view.staticBuildingType) {
       return;
     }
 
-    const textureKey = buildingStaticAssetKey(entity, ownerAge);
-    if (!textureKey) {
+    const spriteDefs = buildingSpriteDefs(entity, ownerAge);
+    if (spriteDefs.length === 0) {
       return;
     }
-    if (view.lastBuildingTexture !== textureKey) {
-      sprite.setTexture(textureKey);
-      view.lastBuildingTexture = textureKey;
+
+    this.ensureBuildingSprites(view, spriteDefs);
+    view.lastBuildingSignature = buildingSpriteSignature(spriteDefs);
+
+    for (let index = 0; index < spriteDefs.length; index += 1) {
+      const sprite = view.sprites[index];
+      const spriteDef = spriteDefs[index];
+      if (!sprite || !spriteDef) {
+        continue;
+      }
+
+      if (sprite.texture.key !== spriteDef.key || sprite.frame.name !== spriteDef.frame) {
+        sprite.setTexture(spriteDef.key, spriteDef.frame);
+      }
+
+      sprite.setVisible(true);
+      sprite.clearTint();
+      sprite.setAlpha(spriteDef.alpha ?? (entity.building.completed ? 1 : 0.48));
+      sprite.setOrigin(spriteDef.originX, spriteDef.originY);
+      sprite.setPosition(spriteDef.x ?? 0, spriteDef.y);
+      setMaxDisplaySize(sprite, spriteDef.maxSize);
+      this.updateBuildingSpriteAnimation(entity, sprite);
+
+      if (entity.farm?.depleted) {
+        sprite.setTint(0x8d8276);
+        sprite.setAlpha(0.78);
+      }
+    }
+  }
+
+  private ensureBuildingSprites(view: EntityView, spriteDefs: BuildingSpriteDef[]): void {
+    while (view.sprites.length < spriteDefs.length) {
+      const spriteDef = spriteDefs[view.sprites.length];
+      const sprite = this.add.sprite(0, 0, spriteDef?.key ?? assetKeys.tiles, spriteDef?.frame);
+      view.sprites.push(sprite);
+      view.container.addAt(sprite, Math.max(1, view.sprites.length));
     }
 
-    sprite.clearTint();
-    sprite.setAlpha(entity.building.completed ? 1 : 0.92);
-    sprite.setOrigin(0.5, 1);
-    sprite.setY(buildingSpriteBaselineY(entity));
-    setMaxDisplaySize(sprite, buildingStaticVisualSize(entity, ownerAge));
-
-    if (entity.farm?.depleted) {
-      sprite.setTint(0x8d8276);
-      sprite.setAlpha(0.78);
+    for (let index = spriteDefs.length; index < view.sprites.length; index += 1) {
+      view.sprites[index]?.setVisible(false);
     }
+  }
+
+  private updateBuildingSpriteAnimation(entity: GameEntity, sprite: Phaser.GameObjects.Sprite): void {
+    if (!entity.building?.completed) {
+      sprite.stop();
+      return;
+    }
+    if (entity.building.type === "mill" && sprite.texture.key === assetKeys.elements.windmill) {
+      sprite.play("element-windmill-idle", true);
+    }
+  }
+
+  private updateBuildingSmoke(entity: GameEntity, view: EntityView): void {
+    const smoke = view.smoke;
+    if (!smoke || !entity.building) {
+      return;
+    }
+    if (!USE_BUILDING_SMOKE) {
+      smoke.setVisible(false);
+      smoke.stop();
+      return;
+    }
+
+    const smokeDef = smokeDefForBuilding(entity.building.type);
+    const buildingSprite = view.sprites[0];
+    if (!entity.building.completed || !smokeDef || !buildingSprite?.visible) {
+      smoke.setVisible(false);
+      smoke.stop();
+      return;
+    }
+
+    smoke.setVisible(true);
+    smoke.setPosition(
+      buildingSprite.x + buildingSprite.displayWidth * smokeDef.xFactor,
+      buildingSprite.y - buildingSprite.displayHeight * smokeDef.yFactor,
+    );
+    smoke.setTint(0xf4fbff);
+    smoke.setAlpha(smokeDef.alpha);
+    setMaxDisplaySize(smoke, smokeDef.maxSize);
+    smoke.play("element-smoke-idle", true);
+  }
+
+  private updateBuildingCompletionEffect(entity: GameEntity, view: EntityView): void {
+    if (!entity.building) {
+      view.container.setScale(1);
+      return;
+    }
+    if (!USE_BUILDING_COMPLETION_BOUNCE) {
+      view.lastBuildingCompleted = entity.building.completed;
+      view.completionEffectStartedAt = undefined;
+      view.container.setScale(1);
+      return;
+    }
+
+    if (view.lastBuildingCompleted === false && entity.building.completed) {
+      view.completionEffectStartedAt = this.time.now;
+      this.playUiClick(720, 0.014);
+    }
+    view.lastBuildingCompleted = entity.building.completed;
+
+    if (view.completionEffectStartedAt === undefined) {
+      view.container.setScale(1);
+      return;
+    }
+
+    const elapsed = this.time.now - view.completionEffectStartedAt;
+    const duration = 420;
+    if (elapsed >= duration) {
+      view.completionEffectStartedAt = undefined;
+      view.container.setScale(1);
+      return;
+    }
+
+    const t = elapsed / duration;
+    const bounce = Math.sin(t * Math.PI) * (1 - t);
+    view.container.setScale(1 + bounce * 0.08, 1 - bounce * 0.045);
   }
 
   private updateWallSprite(entity: GameEntity, view: EntityView, ownerAge: AgeId): void {
@@ -1220,8 +1595,8 @@ export class WorldScene extends Phaser.Scene {
     if (!visual || !sprite) {
       return;
     }
-    if (sprite.texture.key !== visual.key) {
-      sprite.setTexture(visual.key);
+    if (sprite.texture.key !== visual.key || sprite.frame.name !== visual.frame) {
+      sprite.setTexture(visual.key, visual.frame);
     }
     sprite.setPosition(visual.x, visual.y);
     sprite.setOrigin(visual.originX, visual.originY);
@@ -1235,9 +1610,11 @@ export class WorldScene extends Phaser.Scene {
 
   private drawSelection(entity: GameEntity, view: EntityView): void {
     view.selection.clear();
+    this.hideSelectionCorners(view);
     const selected = this.simulation.state.selection.selectedIds.includes(entity.id);
     const hovered = this.hoveredEntityId === entity.id;
-    if (!selected && !hovered) {
+    const constructing = Boolean(entity.ownerId === PLAYER_ID && entity.building && !entity.building.completed);
+    if (!selected && !hovered && !constructing) {
       return;
     }
     const color = entity.kind === "resource" ? 0xe7c86b : entity.ownerId === PLAYER_ID ? 0xd8d2b4 : 0xe85a4a;
@@ -1245,7 +1622,7 @@ export class WorldScene extends Phaser.Scene {
     if (entity.building) {
       const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age ?? "genesis" : "genesis";
       const bounds = buildingInteractionBounds(entity, ownerAge);
-      drawLocalCornerBrackets(view.selection, bounds.x, bounds.y, bounds.width, bounds.height, color, alpha, selected ? 2 : 1);
+      this.showSelectionCorners(view, bounds, color, selected ? 1 : constructing ? 0.72 : alpha, selected || constructing);
       return;
     }
     if (selected) {
@@ -1254,6 +1631,32 @@ export class WorldScene extends Phaser.Scene {
     }
     view.selection.lineStyle(selected ? 2 : 1, color, alpha);
     view.selection.strokeEllipse(0, 2, entity.resourceNode ? 30 : 21, entity.resourceNode ? 12 : 9);
+  }
+
+  private showSelectionCorners(view: EntityView, bounds: { x: number; y: number; width: number; height: number }, color: number, alpha: number, animated = false): void {
+    const corners = view.selectionCorners;
+    if (!corners || corners.length < 4) {
+      return;
+    }
+    const [topLeft, topRight, bottomLeft, bottomRight] = corners;
+    const pulse = animated ? 1 + Math.sin(this.time.now * 0.008) * 0.08 : 1;
+    const drift = animated ? 2 + Math.sin(this.time.now * 0.012) * 1.2 : 0;
+    topLeft.setPosition(bounds.x - drift, bounds.y - drift);
+    topRight.setPosition(bounds.x + bounds.width + drift, bounds.y - drift);
+    bottomLeft.setPosition(bounds.x - drift, bounds.y + bounds.height + drift);
+    bottomRight.setPosition(bounds.x + bounds.width + drift, bounds.y + bounds.height + drift);
+    for (const corner of corners) {
+      corner.setVisible(true);
+      corner.setTint(color);
+      corner.setAlpha(alpha);
+      corner.setScale(1.8 * pulse);
+    }
+  }
+
+  private hideSelectionCorners(view: EntityView): void {
+    for (const corner of view.selectionCorners ?? []) {
+      corner.setVisible(false);
+    }
   }
 
   private drawHealth(entity: GameEntity, view: EntityView): void {
@@ -1419,7 +1822,7 @@ export class WorldScene extends Phaser.Scene {
     }
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
     if (this.placementType === "wall") {
-      this.confirmWallPlacement(tile);
+      this.handleWallPlacementClick(pointer);
       return;
     }
     if (!canPlaceBuildingAt(this.simulation.state, this.placementType, tile)) {
@@ -1444,34 +1847,66 @@ export class WorldScene extends Phaser.Scene {
     this.dragStartScreen = undefined;
   }
 
-  private confirmWallPlacement(tile: TileCoord): void {
-    if (!this.wallLineStartTile) {
-      this.wallLineStartTile = tile;
+  private handleWallPlacementClick(pointer: Phaser.Input.Pointer): void {
+    const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
+    if (!this.wallDraft) {
+      this.wallDraft = { points: [tile] };
+      this.clearSelectionDrag();
       return;
     }
 
-    const end = normalizeWallLineEnd(this.wallLineStartTile, tile);
-    if (!canPlaceWallLineAt(this.simulation.state, this.wallLineStartTile, end)) {
+    const lastPoint = this.wallDraft.points.at(-1);
+    if (!lastPoint) {
+      this.wallDraft = { points: [tile] };
+      return;
+    }
+
+    const end = normalizeWallLineEnd(lastPoint, tile);
+    if (sameTile(end, lastPoint) && this.wallDraft.points.length > 1) {
+      return;
+    }
+    const nextPoints = [...this.wallDraft.points, end];
+    const segments = wallSegmentsForDraftPoints(nextPoints);
+    if (segments.length === 0 || !canPlaceWallSegmentsAt(this.simulation.state, segments)) {
+      this.playUiClick(210, 0.018);
+      return;
+    }
+
+    this.wallDraft.points.push(end);
+    this.clearSelectionDrag();
+    this.playUiClick(520, 0.014);
+  }
+
+  private confirmWallDraft(): void {
+    if (this.placementType !== "wall" || !this.wallDraft) {
+      return;
+    }
+    const segments = wallSegmentsForDraftPoints(this.wallDraft.points);
+    if (segments.length === 0 || !canPlaceWallSegmentsAt(this.simulation.state, segments)) {
+      this.playUiClick(210, 0.018);
       return;
     }
 
     this.simulation.dispatch({
-      type: "buildWallLine",
+      type: "buildWallPath",
       playerId: PLAYER_ID,
-      start: this.wallLineStartTile,
-      end,
+      segments,
       builderIds: this.selectedWorkerIds(),
     });
 
-    const segments = wallLineSegments(this.wallLineStartTile, end);
     const middle = segments[Math.floor(segments.length / 2)];
-    const middleX = middle ? (middle.tile.x + middle.footprint.w / 2) * TILE_SIZE : (this.wallLineStartTile.x + 0.5) * TILE_SIZE;
-    const middleY = middle ? (middle.tile.y + middle.footprint.h / 2) * TILE_SIZE : (this.wallLineStartTile.y + 0.5) * TILE_SIZE;
-    this.showCommandIndicator({ x: middleX, y: middleY }, "build");
-    this.wallLineStartTile = undefined;
+    if (middle) {
+      this.showCommandIndicator(
+        {
+          x: (middle.tile.x + middle.footprint.w / 2) * TILE_SIZE,
+          y: (middle.tile.y + middle.footprint.h / 2) * TILE_SIZE,
+        },
+        "build",
+      );
+    }
+    this.wallDraft = undefined;
     this.hideWallPlacementPreview();
-    this.dragStartWorld = undefined;
-    this.dragStartScreen = undefined;
+    this.clearSelectionDrag();
   }
 
   private updatePlacementPreview(): void {
@@ -1524,29 +1959,31 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updatePlacementPreviewSprite(type: BuildingType, tile: TileCoord, valid: boolean): void {
-    const textureKey = buildingStaticAssetKeyForType(type, true, this.simulation.state.players[PLAYER_ID].age);
-    if (!textureKey) {
+    const age = this.simulation.state.players[PLAYER_ID].age;
+    const previewDef = buildingPreviewSpriteDef(type, age, tile);
+    if (!previewDef) {
       this.hidePlacementPreviewSprite();
       return;
     }
 
     const config = buildingConfigs[type];
     const x = (tile.x + config.footprint.w / 2) * TILE_SIZE;
-    const y = (tile.y + config.footprint.h) * TILE_SIZE + 2;
+    const y = (tile.y + config.footprint.h / 2) * TILE_SIZE + previewDef.y;
     if (!this.placementPreviewSprite) {
-      this.placementPreviewSprite = this.add.sprite(x, y, textureKey).setOrigin(0.5, 1).setDepth(10_000);
-    } else if (this.placementPreviewSprite.texture.key !== textureKey) {
-      this.placementPreviewSprite.setTexture(textureKey);
+      this.placementPreviewSprite = this.add.sprite(x, y, previewDef.key, previewDef.frame).setOrigin(previewDef.originX, previewDef.originY).setDepth(10_000);
+    } else if (this.placementPreviewSprite.texture.key !== previewDef.key || this.placementPreviewSprite.frame.name !== previewDef.frame) {
+      this.placementPreviewSprite.setTexture(previewDef.key, previewDef.frame);
     }
 
     this.placementPreviewSprite.setVisible(true);
     this.placementPreviewSprite.setPosition(x, y);
+    this.placementPreviewSprite.setOrigin(previewDef.originX, previewDef.originY);
     this.placementPreviewSprite.setAlpha(valid ? 0.72 : 0.5);
     this.placementPreviewSprite.clearTint();
     if (!valid) {
       this.placementPreviewSprite.setTint(0xff9b8a);
     }
-    setMaxDisplaySize(this.placementPreviewSprite, buildingStaticVisualSizeForType(type, this.simulation.state.players[PLAYER_ID].age));
+    setMaxDisplaySize(this.placementPreviewSprite, previewDef.maxSize);
   }
 
   private hidePlacementPreviewSprite(): void {
@@ -1554,11 +1991,17 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updatePlacementPreviewGround(type: BuildingType, centerX: number, centerY: number, valid: boolean): void {
+    if (!USE_BUILDING_GROUND_PADS) {
+      this.hidePlacementPreviewGround();
+      return;
+    }
+
     const age = this.simulation.state.players[PLAYER_ID].age;
     const bounds = buildingGroundBoundsForType(type, age);
     if (!this.placementPreviewGround) {
+      const groundTexture = groundPadTexture();
       this.placementPreviewGround = this.add
-        .tileSprite(centerX, centerY + bounds.y + bounds.height / 2, bounds.width, bounds.height, assetKeys.aobMap.baseDirt)
+        .tileSprite(centerX, centerY + bounds.y + bounds.height / 2, bounds.width, bounds.height, groundTexture.key, groundTexture.frame)
         .setOrigin(0.5, 0.5)
         .setDepth(GROUND_PAD_DEPTH);
     }
@@ -1579,11 +2022,25 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private updateWallPlacementPreview(hoverTile: TileCoord): void {
-    const start = this.wallLineStartTile ?? hoverTile;
-    const end = normalizeWallLineEnd(start, hoverTile);
-    const segments = wallLineSegments(start, end);
-    const valid = canPlaceWallLineAt(this.simulation.state, start, end);
+    const segments = this.wallDraftPreviewSegments(hoverTile);
+    const valid = segments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, segments);
     this.updateWallPreviewSprites(segments, valid);
+  }
+
+  private wallDraftPreviewSegments(hoverTile?: TileCoord): WallLineSegment[] {
+    if (this.placementType !== "wall") {
+      return [];
+    }
+    const pointerTile = hoverTile ?? worldToTile({ x: this.input.activePointer.worldX, y: this.input.activePointer.worldY });
+    if (!this.wallDraft) {
+      return wallLineSegments(pointerTile, pointerTile);
+    }
+    const lastPoint = this.wallDraft.points.at(-1);
+    if (!lastPoint) {
+      return [];
+    }
+    const previewEnd = normalizeWallLineEnd(lastPoint, pointerTile);
+    return wallSegmentsForDraftPoints([...this.wallDraft.points, previewEnd]);
   }
 
   private updateWallPreviewSprites(segments: WallLineSegment[], valid: boolean): void {
@@ -1674,10 +2131,8 @@ export class WorldScene extends Phaser.Scene {
     const pointer = this.input.activePointer;
     if (this.placementType) {
       const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
-      const valid =
-        this.placementType === "wall" && this.wallLineStartTile
-          ? canPlaceWallLineAt(this.simulation.state, this.wallLineStartTile, normalizeWallLineEnd(this.wallLineStartTile, tile))
-          : canPlaceBuildingAt(this.simulation.state, this.placementType, tile);
+      const wallSegments = this.placementType === "wall" ? this.wallDraftPreviewSegments(tile) : [];
+      const valid = this.placementType === "wall" ? wallSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallSegments) : canPlaceBuildingAt(this.simulation.state, this.placementType, tile);
       this.setCursor(valid ? "copy" : "not-allowed");
       return;
     }
@@ -1719,7 +2174,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     this.currentCursor = cursor;
-    this.input.setDefaultCursor(cursor);
+    this.input.setDefaultCursor(SUNNYSIDE_CURSOR_CSS[cursor] ?? cursor);
   }
 
   private showCommandIndicator(point: Vec2, kind: "move" | "attack" | "gather" | "build" | "rally"): void {
@@ -1785,6 +2240,240 @@ export class WorldScene extends Phaser.Scene {
       onComplete: () => graphics.destroy(),
     });
   }
+}
+
+const sunnysideBuildingFrames: Record<string, AtlasFrameDef> = {
+  "sunnyside-building-hall-blue": { x: 320, y: 160, width: 144, height: 64, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-hall-green": { x: 320, y: 288, width: 144, height: 64, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-hall-orange": { x: 320, y: 432, width: 144, height: 64, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-hall-red": { x: 320, y: 560, width: 144, height: 64, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-hall-purple": { x: 320, y: 688, width: 144, height: 64, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-house-blue": { x: 520, y: 168, width: 32, height: 56, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-house-green": { x: 520, y: 296, width: 32, height: 56, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-house-orange": { x: 520, y: 424, width: 32, height: 56, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-house-red": { x: 520, y: 552, width: 32, height: 56, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-house-purple": { x: 520, y: 680, width: 32, height: 56, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-tower-blue": { x: 472, y: 151, width: 32, height: 99, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-tower-green": { x: 472, y: 279, width: 32, height: 99, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-tower-orange": { x: 472, y: 407, width: 32, height: 99, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-tower-red": { x: 472, y: 535, width: 32, height: 99, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-tower-purple": { x: 472, y: 663, width: 32, height: 99, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-workbench": { x: 595, y: 256, width: 29, height: 48, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-forge": { x: 628, y: 256, width: 27, height: 48, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-stone-machine": { x: 704, y: 292, width: 64, height: 55, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-wood-stack": { x: 624, y: 144, width: 32, height: 32, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-market-chests": { x: 576, y: 474, width: 64, height: 27, originX: 0.5, originY: 0.98 },
+  "sunnyside-building-red-rug": { x: 644, y: 563, width: 41, height: 42, originX: 0.5, originY: 0.82 },
+};
+
+function sunnysideTerrainKindForTile(map: MapState, tile: TileType, x: number, y: number): SunnysideTerrainKind {
+  if (tile === "water" || tile === "deepWater") {
+    if (tile === "deepWater") {
+      return "waterDeep";
+    }
+    return hasNearbyTile(map, x, y, isLandChunk, 1) ? "waterEdge" : "waterDeep";
+  }
+  if (tile === "stoneGround") {
+    return "stone";
+  }
+  if (tile === "crystalGround") {
+    return "crystal";
+  }
+  if (tile === "dirt" || tile === "path" || isSunnysideVillagePlazaTile(x, y)) {
+    return "dirt";
+  }
+  if (hasNearbyTile(map, x, y, isWaterChunk, 1) && hash2(x, y) % 6 === 0) {
+    return "dirt";
+  }
+  return "grass";
+}
+
+function sunnysideTerrainFrameForKind(kind: SunnysideTerrainKind, x: number, y: number): number {
+  switch (kind) {
+    case "waterEdge":
+      return pickFrame(SUNNYSIDE_WATER_EDGE_FRAMES, x, y);
+    case "waterDeep":
+      return pickFrame(SUNNYSIDE_WATER_DEEP_FRAMES, x, y);
+    case "stone":
+      return pickFrame(SUNNYSIDE_STONE_FRAMES, x, y);
+    case "crystal":
+      return pickFrame(SUNNYSIDE_CRYSTAL_GROUND_FRAMES, x, y);
+    case "dirt":
+      return pickFrame(SUNNYSIDE_DIRT_FRAMES, x, y);
+    case "grass":
+    default:
+      return pickFrame(SUNNYSIDE_GRASS_FRAMES, x, y);
+  }
+}
+
+function pickFrame(frames: readonly number[], x: number, y: number): number {
+  return frames[hash2(x, y) % frames.length] ?? frames[0] ?? 0;
+}
+
+function isSunnysideVillagePlazaTile(x: number, y: number): boolean {
+  return (
+    inNoisyEllipse(x, y, 59, 60, 16, 11, 0.18) ||
+    inNoisyEllipse(x, y, 44, 57, 7, 5, 0.12) ||
+    inNoisyEllipse(x, y, 72, 56, 8, 6, 0.12)
+  );
+}
+
+function inNoisyEllipse(x: number, y: number, cx: number, cy: number, rx: number, ry: number, noise: number): boolean {
+  const normalized = ((x - cx) * (x - cx)) / (rx * rx) + ((y - cy) * (y - cy)) / (ry * ry);
+  const edgeNoise = ((hash2(x, y) % 100) / 100 - 0.5) * noise;
+  return normalized <= 1 + edgeNoise;
+}
+
+function sunnysideBuildingBlueprintForType(type: BuildingType, age: AgeId): SunnysideBuildingBlueprint | undefined {
+  const ageColor = age === "network" ? "purple" : age === "settlement" ? "green" : "blue";
+  const ageHall = `sunnyside-building-hall-${ageColor}`;
+  const ageHouse = `sunnyside-building-house-${ageColor}`;
+  const ageTower = `sunnyside-building-tower-${ageColor}`;
+  switch (type) {
+    case "townCenter":
+      return {
+        visualSize: 222,
+        parts: [
+          { key: assetKeys.tiles, frame: ageHall, maxSize: 214, originX: 0.5, originY: 0.98, yOffset: 2 },
+          { key: assetKeys.tiles, frame: ageTower, maxSize: 74, originX: 0.5, originY: 0.98, x: 84, yOffset: -6 },
+          { key: assetKeys.tiles, frame: "sunnyside-building-wood-stack", maxSize: 42, originX: 0.5, originY: 0.98, x: -90, yOffset: 4 },
+          { key: assetKeys.tiles, frame: "sunnyside-building-market-chests", maxSize: 54, originX: 0.5, originY: 0.98, x: 88, yOffset: 7 },
+        ],
+      };
+    case "house":
+      return {
+        visualSize: 74,
+        parts: [{ key: assetKeys.tiles, frame: ageHouse, maxSize: 74, originX: 0.5, originY: 0.98, yOffset: 1 }],
+      };
+    case "lumberCamp":
+      return {
+        visualSize: 104,
+        parts: [
+          { key: assetKeys.tiles, frame: "sunnyside-building-workbench", maxSize: 82, originX: 0.5, originY: 0.98, x: 12, yOffset: 1 },
+          { key: assetKeys.tiles, frame: "sunnyside-building-wood-stack", maxSize: 48, originX: 0.5, originY: 0.98, x: -36, yOffset: 5 },
+          { key: assetKeys.elements.wood, maxSize: 28, originX: 0.5, originY: 0.84, x: 48, yOffset: 4 },
+        ],
+      };
+    case "mill":
+      return {
+        visualSize: 128,
+        parts: [{ key: assetKeys.elements.windmill, frame: 0, maxSize: 128, originX: 0.5, originY: 0.98, yOffset: 2 }],
+      };
+    case "stoneCamp":
+      return {
+        visualSize: 116,
+        parts: [
+          { key: assetKeys.tiles, frame: "sunnyside-building-stone-machine", maxSize: 92, originX: 0.5, originY: 0.98, x: -8, yOffset: 1 },
+          { key: assetKeys.elements.rock, maxSize: 34, originX: 0.5, originY: 0.82, x: 50, yOffset: 6 },
+        ],
+      };
+    case "goldCamp":
+      return {
+        visualSize: 106,
+        parts: [
+          { key: assetKeys.tiles, frame: "sunnyside-building-house-purple", maxSize: 68, originX: 0.5, originY: 0.98, x: -20, yOffset: 1 },
+          { key: assetKeys.aobMap.solanaCrystalNodeSmall, maxSize: 38, originX: 0.5, originY: 0.88, x: 32, yOffset: 5 },
+        ],
+      };
+    case "barracks":
+      return {
+        visualSize: 194,
+        parts: [
+          { key: assetKeys.tiles, frame: "sunnyside-building-hall-red", maxSize: 188, originX: 0.5, originY: 0.98, yOffset: 2 },
+          { key: assetKeys.tiles, frame: "sunnyside-building-red-rug", maxSize: 42, originX: 0.5, originY: 0.82, x: 62, yOffset: 8 },
+        ],
+      };
+    case "watchTower":
+      return {
+        visualSize: 96,
+        parts: [{ key: assetKeys.tiles, frame: ageTower, maxSize: 94, originX: 0.5, originY: 0.98, yOffset: 1 }],
+      };
+    case "farm":
+      return {
+        visualSize: 104,
+        parts: [{ key: assetKeys.elements.soil, maxSize: 104, originX: 0.5, originY: 0.5, yOffset: -3 }],
+      };
+    default:
+      return undefined;
+  }
+}
+
+function smokeDefForBuilding(type: BuildingType): BuildingSmokeDef | undefined {
+  switch (type) {
+    case "townCenter":
+      return { xFactor: 0.15, yFactor: 0.84, maxSize: 46, alpha: 0.88 };
+    case "house":
+      return { xFactor: 0.16, yFactor: 0.82, maxSize: 32, alpha: 0.82 };
+    case "lumberCamp":
+      return { xFactor: 0.14, yFactor: 0.8, maxSize: 32, alpha: 0.78 };
+    case "barracks":
+      return { xFactor: 0.13, yFactor: 0.82, maxSize: 38, alpha: 0.78 };
+    case "stoneCamp":
+    case "goldCamp":
+      return { xFactor: 0.11, yFactor: 0.82, maxSize: 28, alpha: 0.72 };
+    case "watchTower":
+      return { xFactor: 0, yFactor: 0.9, maxSize: 26, alpha: 0.68 };
+    default:
+      return undefined;
+  }
+}
+
+function buildingPreviewSpriteDef(type: BuildingType, age: AgeId, _tile: TileCoord): BuildingSpriteDef | undefined {
+  return buildingSpriteDefsForType(type, true, age, buildingConfigs[type].footprint)[0];
+}
+
+function buildingSpriteDefs(entity: GameEntity, ownerAge: AgeId): BuildingSpriteDef[] {
+  if (!entity.building) {
+    return [];
+  }
+  return buildingSpriteDefsForType(entity.building.type, entity.building.completed, ownerAge, entity.building.footprint);
+}
+
+function buildingSpriteDefsForType(type: BuildingType, completed: boolean, ownerAge: AgeId, footprint: { w: number; h: number }): BuildingSpriteDef[] {
+  if (USE_SUNNYSIDE_BUILDINGS) {
+    const blueprint = sunnysideBuildingBlueprintForType(type, ownerAge);
+    if (blueprint) {
+      return blueprint.parts.map((part) => ({
+        key: part.key,
+        frame: part.frame,
+        maxSize: part.maxSize,
+        originX: part.originX,
+        originY: part.originY,
+        x: part.x,
+        y: footprint.h * TILE_SIZE * 0.5 + 2 + (part.yOffset ?? 0),
+        alpha: part.alpha ?? (completed ? 1 : 0.46),
+      }));
+    }
+  }
+
+  const textureKey = buildingStaticAssetKeyForType(type, completed, ownerAge);
+  if (!textureKey) {
+    return [];
+  }
+  return [
+    {
+      key: textureKey,
+      maxSize: completed ? buildingStaticVisualSizeForType(type, ownerAge) : constructionVisualSizeForType(type),
+      originX: 0.5,
+      originY: 1,
+      y: footprint.h * TILE_SIZE * 0.5 + 2,
+    },
+  ];
+}
+
+function buildingSpriteSignature(spriteDefs: BuildingSpriteDef[]): string {
+  return spriteDefs.map((def) => `${def.key}:${String(def.frame ?? "")}:${def.maxSize}:${def.x ?? 0}:${def.y}:${def.alpha ?? ""}`).join("|");
+}
+
+function groundPadTexture(): { key: string; frame?: string | number } {
+  return USE_SUNNYSIDE_BUILDINGS ? { key: assetKeys.tiles, frame: SUNNYSIDE_DIRT_FRAMES[0] } : { key: assetKeys.aobMap.baseDirt };
+}
+
+function decorFrameForKey(key: string): string | number | undefined {
+  if (key === assetKeys.elements.tree1 || key === assetKeys.elements.tree2 || key === assetKeys.elements.windmill || key === assetKeys.elements.fire || key === assetKeys.elements.smoke) {
+    return 0;
+  }
+  return undefined;
 }
 
 function terrainKindForChunk(map: MapState, startX: number, startY: number): TileType {
@@ -1896,6 +2585,7 @@ function setMaxDisplaySize(sprite: Phaser.GameObjects.Image | Phaser.GameObjects
 
 type ResourceVisual = {
   key: string;
+  frame?: string | number;
   maxSize: number;
   originX: number;
   originY: number;
@@ -1909,6 +2599,7 @@ type DecorPlacement = {
   tileX: number;
   tileY: number;
   key: string;
+  frame?: string | number;
   maxSize: number;
   originX?: number;
   originY?: number;
@@ -1928,6 +2619,7 @@ function resourceVisualFor(entity: GameEntity): ResourceVisual | undefined {
   }
   return {
     key: visual.key,
+    frame: visual.frame,
     maxSize: visual.maxSize,
     originX: visual.originX,
     originY: visual.originY,
@@ -1940,6 +2632,39 @@ function resourceVisualFor(entity: GameEntity): ResourceVisual | undefined {
 
 function normalizeWallLineEnd(start: TileCoord, hover: TileCoord): TileCoord {
   return Math.abs(hover.x - start.x) >= Math.abs(hover.y - start.y) ? { x: hover.x, y: start.y } : { x: start.x, y: hover.y };
+}
+
+function sameTile(a: TileCoord, b: TileCoord): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
+function wallSegmentsForDraftPoints(points: TileCoord[]): WallLineSegment[] {
+  const segments: WallLineSegment[] = [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
+    if (!start || !end) {
+      continue;
+    }
+    const segmentStart = index === 0 ? start : nextTileAfterCorner(start, end);
+    if (!segmentStart) {
+      continue;
+    }
+    segments.push(...wallLineSegments(segmentStart, end));
+  }
+  return segments;
+}
+
+function nextTileAfterCorner(start: TileCoord, end: TileCoord): TileCoord | undefined {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (dx === 0 && dy === 0) {
+    return undefined;
+  }
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return { x: start.x + Math.sign(dx), y: start.y };
+  }
+  return { x: start.x, y: start.y + Math.sign(dy) };
 }
 
 function isGatherableEntity(entity: GameEntity): boolean {
@@ -1995,6 +2720,12 @@ function buildingRenderedVisualSize(entity: GameEntity): number {
 function buildingStaticVisualSize(entity: GameEntity, ownerAge?: AgeId): number {
   if (!entity.building) {
     return 48;
+  }
+  if (USE_SUNNYSIDE_BUILDINGS) {
+    const blueprint = sunnysideBuildingBlueprintForType(entity.building.type, ownerAge ?? "genesis");
+    if (blueprint) {
+      return blueprint.visualSize;
+    }
   }
   return entity.building.completed ? buildingStaticVisualSizeForType(entity.building.type, ownerAge) : constructionVisualSizeForType(entity.building.type);
 }
@@ -2061,6 +2792,21 @@ function actionForEntity(entity: GameEntity, entities: Record<EntityId, GameEnti
     case "dead":
       return "death";
     case "idle":
+    default:
+      return "idle";
+  }
+}
+
+function tinyCombatAction(action: HumanAction): "idle" | "walk" | "attack" | "hurt" | "death" {
+  switch (action) {
+    case "walk":
+      return "walk";
+    case "attack":
+      return "attack";
+    case "hurt":
+      return "hurt";
+    case "death":
+      return "death";
     default:
       return "idle";
   }
@@ -2158,20 +2904,6 @@ function drawBuilding(graphics: Phaser.GameObjects.Graphics, entity: GameEntity,
   }
 }
 
-function drawLocalCornerBrackets(
-  graphics: Phaser.GameObjects.Graphics,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: number,
-  alpha: number,
-  lineWidth: number,
-): void {
-  graphics.lineStyle(lineWidth, color, alpha);
-  drawCornerLines(graphics, x, y, width, height);
-}
-
 function drawWorldCornerBrackets(
   graphics: Phaser.GameObjects.Graphics,
   x: number,
@@ -2201,17 +2933,26 @@ function drawCornerLines(graphics: Phaser.GameObjects.Graphics, x: number, y: nu
 }
 
 function createGroundPad(scene: Phaser.Scene, type: BuildingType | undefined): Phaser.GameObjects.TileSprite | undefined {
+  if (!USE_BUILDING_GROUND_PADS) {
+    return undefined;
+  }
+
   if (!type || type === "wall" || type === "enemyCamp") {
     return undefined;
   }
 
+  const groundTexture = groundPadTexture();
   return scene.add
-    .tileSprite(0, 0, 64, 64, assetKeys.aobMap.baseDirt)
+    .tileSprite(0, 0, 64, 64, groundTexture.key, groundTexture.frame)
     .setOrigin(0.5, 0.5);
 }
 
 function isWaterChunk(tile: TileType): boolean {
   return tile === "water" || tile === "deepWater";
+}
+
+function isLandChunk(tile: TileType): boolean {
+  return !isWaterChunk(tile);
 }
 
 function naturalDecorForTile(map: MapState, tile: TileType, x: number, y: number): Omit<DecorPlacement, "tileX" | "tileY"> | undefined {

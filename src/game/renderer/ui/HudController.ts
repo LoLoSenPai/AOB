@@ -10,6 +10,7 @@ type HudCallbacks = {
   onOpenBuildMenu: () => void;
   onCloseBuildMenu: () => void;
   onCancelPlacement: () => void;
+  onConfirmPlacement: () => void;
   onTrainRequest: (unitType: UnitType) => void;
   onAdvanceAgeRequest: () => void;
   onReseedFarmRequest: (farmId: string) => void;
@@ -20,6 +21,8 @@ type HudCallbacks = {
 export type HudRenderContext = {
   placementType?: BuildingType;
   wallLineStarted: boolean;
+  wallSegmentCount: number;
+  wallPlacementCanConfirm: boolean;
   buildMenuOpen: boolean;
   camera?: {
     x: number;
@@ -36,15 +39,20 @@ const BUILD_GROUPS: { label: string; buildings: BuildingType[] }[] = [
 ];
 
 const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
-  food: "/last-assets/runtime/icon-food.png",
-  wood: "/last-assets/runtime/icon-wood.png",
-  stone: "/last-assets/runtime/icon-stone.png",
+  food: "/assets/sunnyside/elements/wheat_05.png",
+  wood: "/assets/sunnyside/elements/wood.png",
+  stone: "/assets/sunnyside/elements/rock.png",
   gold: "/last-assets/runtime/icon-gold.png",
 };
 
-const POPULATION_ICON_PATH = "/last-assets/runtime/icon-population.png";
+const POPULATION_ICON_PATH = "/assets/sunnyside/ui/indicator.png";
 const WALL_ICON_PATH = "/last-assets/runtime/wall-palisade-horizontal.png?v=20260424-225617";
 const SOLANA_CREST_PATH = "/assets/aob-map/runtime/solana-ui-crest.png";
+const UNIT_PORTRAIT_PATHS: Partial<Record<UnitType, string>> = {
+  worker: "/assets/ui/portraits/villager.png",
+  soldier: "/assets/ui/portraits/knight.png",
+  archer: "/assets/ui/portraits/archer.png",
+};
 
 const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> = {
   townCenter: {
@@ -199,6 +207,9 @@ export class HudController {
     this.root.querySelectorAll<HTMLButtonElement>("[data-cancel-placement]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onCancelPlacement());
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-confirm-placement]").forEach((button) => {
+      button.addEventListener("click", () => this.callbacks.onConfirmPlacement());
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-select-idle]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onSelectIdleWorker());
     });
@@ -308,6 +319,7 @@ function productionQueueMarkup(entity: GameEntity): string {
             const progress = Math.round((1 - item.remainingTicks / Math.max(1, item.totalTicks)) * 100);
             return `
               <div class="queue-item ${index === 0 ? "queue-item--active" : ""}">
+                ${unitPortraitMarkup(item.unitType, "queue-unit-icon")}
                 <span>${unitConfigs[item.unitType].label}</span>
                 <strong>${index === 0 ? `${progress}%` : "Queued"}</strong>
                 ${index === 0 ? `<span class="queue-progress"><span style="width:${progress}%"></span></span>` : ""}
@@ -351,7 +363,21 @@ function rallyPointMarkup(entity: GameEntity): string {
 
 function commandDockMarkup(state: GameState, primary: GameEntity | undefined, context: HudRenderContext): string {
   if (context.placementType) {
-    const labelText = context.placementType === "wall" && context.wallLineStarted ? "Choose wall end" : `Placing ${labelForBuilding(context.placementType, state.players[PLAYER_ID].age)}`;
+    if (context.placementType === "wall") {
+      const labelText = context.wallLineStarted
+        ? `${context.wallSegmentCount} wall segment${context.wallSegmentCount === 1 ? "" : "s"}`
+        : "Choose wall start";
+      return `
+        <div class="command-dock">
+          <div class="command-section">
+            <div class="command-label">${labelText}</div>
+            <button class="command-button command-wide" data-confirm-placement="true" ${context.wallPlacementCanConfirm ? "" : "disabled"}>Build Wall</button>
+            <button class="command-button command-wide" data-cancel-placement="true">Cancel</button>
+          </div>
+        </div>
+      `;
+    }
+    const labelText = `Placing ${labelForBuilding(context.placementType, state.players[PLAYER_ID].age)}`;
     return `
       <div class="command-dock">
         <div class="command-section">
@@ -453,7 +479,7 @@ function producerButtons(entity: GameEntity, state: GameState): string {
       const disabled = locked || !affordable || blockedByPopulation;
       const reason = locked ? ageConfigs[config.unlockedAge].label : blockedByPopulation ? "Need House" : !affordable ? "Need res." : undefined;
       const body = reason ? `<span class="lock-label">${reason}</span>` : costLabel(config.cost);
-      return `<button class="command-button ${blockedByPopulation ? "command-button--blocked" : ""}" data-train="${type}" ${disabled ? "disabled" : ""}><span class="command-title">${shortLabel(config.label)}</span>${body}</button>`;
+      return `<button class="command-button ${blockedByPopulation ? "command-button--blocked" : ""}" data-train="${type}" ${disabled ? "disabled" : ""}>${unitPortraitMarkup(type, "command-unit-icon")}<span class="command-title">${shortLabel(config.label)}</span>${body}</button>`;
     })
     .join("");
 }
@@ -538,12 +564,23 @@ function selectionPortrait(primary: GameEntity | undefined, selected: GameEntity
   if (selected.length > 1) {
     return `<div class="selection-portrait selection-portrait--group"><span>${selected.length}</span></div>`;
   }
+  if (primary.unit) {
+    return `<div class="selection-portrait selection-portrait--unit">${unitPortraitMarkup(primary.unit.type, "selection-portrait-sprite")}</div>`;
+  }
   const image = portraitPath(primary, state);
   if (image) {
     return `<div class="selection-portrait"><img src="${image}" alt=""></div>`;
   }
-  const glyph = primary.unit?.type === "soldier" ? "I" : primary.worker ? "V" : "?";
+  const glyph = primary.worker ? "V" : "?";
   return `<div class="selection-portrait selection-portrait--glyph"><span>${glyph}</span></div>`;
+}
+
+function unitPortraitMarkup(type: UnitType, className: string): string {
+  const path = UNIT_PORTRAIT_PATHS[type];
+  if (!path) {
+    return `<span class="${className} unit-sprite unit-sprite--fallback"><span>${type.slice(0, 1).toUpperCase()}</span></span>`;
+  }
+  return `<span class="${className} unit-sprite unit-sprite--${type}" style="background-image:url('${path}')"></span>`;
 }
 
 function portraitPath(entity: GameEntity, state: GameState): string | undefined {

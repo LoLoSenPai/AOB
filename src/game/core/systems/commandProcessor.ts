@@ -10,7 +10,7 @@ import {
   resourceConfigs,
   unitConfigs,
 } from "../../data/definitions";
-import type { GameCommand } from "../commands/types";
+import type { GameCommand, WallPathSegmentDraft } from "../commands/types";
 import type { EntityId, GameEntity } from "../entities/types";
 import { createBuilding, worldFromTile } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
@@ -39,6 +39,9 @@ export function applyCommand(state: GameState, command: GameCommand): void {
       break;
     case "buildWallLine":
       applyBuildWallLine(state, command.playerId, command.start, command.end, command.builderIds);
+      break;
+    case "buildWallPath":
+      applyBuildWallPath(state, command.playerId, command.segments, command.builderIds);
       break;
     case "assignBuilders":
       applyAssignBuilders(state, command.playerId, command.buildingId, command.builderIds);
@@ -208,9 +211,25 @@ function assignBuildersToConstruction(state: GameState, playerId: PlayerId, buil
 }
 
 function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoord, end: TileCoord, builderIds: EntityId[]): void {
+  applyBuildWallSegments(state, playerId, wallLineSegments(start, end), builderIds);
+}
+
+function applyBuildWallPath(state: GameState, playerId: PlayerId, segments: WallPathSegmentDraft[], builderIds: EntityId[]): void {
+  applyBuildWallSegments(
+    state,
+    playerId,
+    segments.map((segment) => ({
+      tile: { ...segment.tile },
+      footprint: { ...segment.footprint },
+      direction: segment.direction,
+    })),
+    builderIds,
+  );
+}
+
+function applyBuildWallSegments(state: GameState, playerId: PlayerId, segments: WallPathSegmentDraft[], builderIds: EntityId[]): void {
   const player = state.players[playerId];
   const config = buildingConfigs.wall;
-  const segments = wallLineSegments(start, end);
   if (!player || !hasReachedAge(player.age, config.unlockedAge)) {
     addMessage(state, "Walls are not unlocked yet.");
     return;
@@ -218,7 +237,7 @@ function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoo
   if (segments.length === 0) {
     return;
   }
-  if (!segments.every((segment) => isRectBuildable(state, segment.tile, segment.footprint))) {
+  if (!wallSegmentsDoNotOverlap(segments) || !segments.every((segment) => isRectBuildable(state, segment.tile, segment.footprint))) {
     addMessage(state, "Cannot build wall there.");
     return;
   }
@@ -265,6 +284,22 @@ function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoo
   }
 
   addMessage(state, `${segments.length} ${labelForBuilding("wall", player.age).toLowerCase()} segment${segments.length > 1 ? "s" : ""} placed.`);
+}
+
+function wallSegmentsDoNotOverlap(segments: WallPathSegmentDraft[]): boolean {
+  const occupied = new Set<string>();
+  for (const segment of segments) {
+    for (let y = 0; y < segment.footprint.h; y += 1) {
+      for (let x = 0; x < segment.footprint.w; x += 1) {
+        const key = `${segment.tile.x + x},${segment.tile.y + y}`;
+        if (occupied.has(key)) {
+          return false;
+        }
+        occupied.add(key);
+      }
+    }
+  }
+  return true;
 }
 
 function applyTrainUnit(state: GameState, playerId: PlayerId, buildingId: EntityId, unitType: keyof typeof unitConfigs): void {

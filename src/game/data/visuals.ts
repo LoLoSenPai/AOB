@@ -12,6 +12,7 @@ export type TerrainVisualDef = {
 
 export type SpriteVisualDef = {
   key: string;
+  frame?: string | number;
   maxSize: number;
   originX: number;
   originY: number;

@@ -8,6 +8,8 @@ export class PreloadScene extends Phaser.Scene {
 
   preload(): void {
     this.loadHumanSheets();
+    this.loadSunnysideWorldAssets();
+    this.loadTinyRpgAssets();
     this.loadAobMapAssets();
     this.loadAobBuildingStaticAssets();
     this.loadAobWallAssets();
@@ -44,6 +46,90 @@ export class PreloadScene extends Phaser.Scene {
         frameHeight: 64,
       });
     }
+  }
+
+  private loadSunnysideWorldAssets(): void {
+    this.load.spritesheet(assetKeys.tiles, "/assets/sunnyside/tiles/sunnyside_16.png", {
+      frameWidth: 16,
+      frameHeight: 16,
+    });
+    this.load.image(assetKeys.forest, "/assets/sunnyside/tiles/forest_32.png");
+    this.load.spritesheet(assetKeys.elements.tree1, "/assets/sunnyside/elements/spr_deco_tree_01_strip4.png", {
+      frameWidth: 32,
+      frameHeight: 34,
+    });
+    this.load.spritesheet(assetKeys.elements.tree2, "/assets/sunnyside/elements/spr_deco_tree_02_strip4.png", {
+      frameWidth: 28,
+      frameHeight: 43,
+    });
+    this.load.image(assetKeys.elements.rock, "/assets/sunnyside/elements/rock.png");
+    this.load.image(assetKeys.elements.wood, "/assets/sunnyside/elements/wood.png");
+    this.load.image(assetKeys.elements.wheat, "/assets/sunnyside/elements/wheat_05.png");
+    this.load.image(assetKeys.elements.carrot, "/assets/sunnyside/elements/carrot_05.png");
+    this.load.image(assetKeys.elements.soil, "/assets/sunnyside/elements/soil_00.png");
+    this.load.spritesheet(assetKeys.elements.windmill, "/assets/sunnyside/elements/spr_deco_windmill_withshadow_strip9.png", {
+      frameWidth: 112,
+      frameHeight: 112,
+    });
+    this.load.spritesheet(assetKeys.elements.fire, "/assets/sunnyside/elements/spr_deco_fire_01_strip4.png", {
+      frameWidth: 5,
+      frameHeight: 10,
+    });
+    this.load.spritesheet(assetKeys.elements.smoke, "/assets/sunnyside/elements/chimneysmoke_01_strip30.png", {
+      frameWidth: 15,
+      frameHeight: 37,
+    });
+    this.load.image(assetKeys.ui.selectBoxTl, "/assets/sunnyside/ui/selectbox_tl.png");
+    this.load.image(assetKeys.ui.selectBoxTr, "/assets/sunnyside/ui/selectbox_tr.png");
+    this.load.image(assetKeys.ui.selectBoxBl, "/assets/sunnyside/ui/selectbox_bl.png");
+    this.load.image(assetKeys.ui.selectBoxBr, "/assets/sunnyside/ui/selectbox_br.png");
+  }
+
+  private loadTinyRpgAssets(): void {
+    const fullPackRoot = "/Tiny RPG Character Asset Pack v1.03 -Full 20 Characters";
+    const knightRoot = encodeURI(`${fullPackRoot}/Characters(100x100)/Knight Templar/Knight Templar`);
+    const archerRoot = encodeURI(`${fullPackRoot}/Characters(100x100)/Archer/Archer`);
+    this.load.spritesheet(assetKeys.tinyRpg.soldier.idle, `${knightRoot}/Knight%20Templar-Idle.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.soldier.walk, `${knightRoot}/Knight%20Templar-Walk01.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.soldier.attack, `${knightRoot}/Knight%20Templar-Attack01.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.soldier.hurt, `${knightRoot}/Knight%20Templar-Hurt.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.soldier.death, `${knightRoot}/Knight%20Templar-Death.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.archer.idle, `${archerRoot}/Archer-Idle.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.archer.walk, `${archerRoot}/Archer-Walk.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.archer.attack, `${archerRoot}/Archer-Attack01.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.archer.hurt, `${archerRoot}/Archer-Hurt.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.archer.death, `${archerRoot}/Archer-Death.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.image(assetKeys.tinyRpg.arrow, encodeURI(`${fullPackRoot}/Arrow(Projectile)/Arrow02(32x32).png`));
   }
 
   private loadAobMapAssets(): void {

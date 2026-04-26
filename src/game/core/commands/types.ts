@@ -1,5 +1,5 @@
 import type { AgeId, PlayerId } from "../../data/constants";
-import type { BuildingType, EntityId, UnitType } from "../entities/types";
+import type { BuildingType, EntityId, Footprint, UnitType } from "../entities/types";
 import type { Vec2 } from "../state/types";
 
 export type CommandBase = {
@@ -41,6 +41,21 @@ export type BuildWallLineCommand = CommandBase & {
     x: number;
     y: number;
   };
+  builderIds: EntityId[];
+};
+
+export type WallPathSegmentDraft = {
+  tile: {
+    x: number;
+    y: number;
+  };
+  footprint: Footprint;
+  direction: "horizontal" | "vertical";
+};
+
+export type BuildWallPathCommand = CommandBase & {
+  type: "buildWallPath";
+  segments: WallPathSegmentDraft[];
   builderIds: EntityId[];
 };
 
@@ -99,6 +114,7 @@ export type GameCommand =
   | MoveUnitsCommand
   | BuildStructureCommand
   | BuildWallLineCommand
+  | BuildWallPathCommand
   | AssignBuildersCommand
   | TrainUnitCommand
   | SetRallyPointCommand

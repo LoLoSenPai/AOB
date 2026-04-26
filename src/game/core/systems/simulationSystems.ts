@@ -4,7 +4,7 @@ import type { EntityId, GameEntity } from "../entities/types";
 import { completedObjectiveIdsInOrder, objectiveTitle } from "../selectors/objectives";
 import { createUnit } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
-import type { GameState, TileCoord } from "../state/types";
+import type { CombatEvent, GameState, TileCoord } from "../state/types";
 import {
   distance,
   findFreeAdjacentTiles,
@@ -16,7 +16,7 @@ import {
   worldToTile,
 } from "./mapQueries";
 import { findPath } from "./pathfinding";
-import { wallLineSegments } from "./wallPlacement";
+import { wallLineSegments, type WallLineSegment } from "./wallPlacement";
 
 export function runSimulationSystems(state: GameState): void {
   runAiSystem(state);
@@ -29,6 +29,7 @@ export function runSimulationSystems(state: GameState): void {
   runProgressionSystem(state);
   runObjectiveSystem(state);
   runCleanupSystem(state);
+  trimCombatEvents(state);
 }
 
 function runMovementSystem(state: GameState): void {
@@ -466,6 +467,7 @@ function runCombatSystem(state: GameState): void {
     if (entity.combat.cooldownRemaining <= 0) {
       target.health.current -= entity.combat.damage;
       target.visualState = "hurt";
+      addCombatEvent(state, entity, target, entity.combat.damage);
       entity.combat.cooldownRemaining = entity.combat.cooldownTicks;
       if (target.health.current <= 0) {
         target.visualState = "dead";
@@ -475,6 +477,26 @@ function runCombatSystem(state: GameState): void {
       }
     }
   }
+}
+
+function addCombatEvent(state: GameState, attacker: GameEntity, target: GameEntity, damage: number): void {
+  const event: CombatEvent = {
+    id: state.tick * 1000 + state.combatEvents.length,
+    tick: state.tick,
+    kind: attacker.unit?.type === "archer" ? "arrow" : "melee",
+    attackerId: attacker.id,
+    targetId: target.id,
+    attackerUnitType: attacker.unit?.type,
+    source: { ...attacker.position },
+    target: { ...target.position },
+    damage,
+  };
+  state.combatEvents.push(event);
+}
+
+function trimCombatEvents(state: GameState): void {
+  const oldestVisibleTick = state.tick - 60;
+  state.combatEvents = state.combatEvents.filter((event) => event.tick >= oldestVisibleTick).slice(-40);
 }
 
 function runAiSystem(state: GameState): void {
@@ -583,7 +605,27 @@ export function canPlaceBuildingAt(state: GameState, buildingType: keyof typeof 
 }
 
 export function canPlaceWallLineAt(state: GameState, start: TileCoord, end: TileCoord): boolean {
-  return wallLineSegments(start, end).every((segment) => isRectBuildable(state, segment.tile, segment.footprint));
+  return canPlaceWallSegmentsAt(state, wallLineSegments(start, end));
+}
+
+export function canPlaceWallSegmentsAt(state: GameState, segments: WallLineSegment[]): boolean {
+  return wallSegmentsDoNotOverlap(segments) && segments.every((segment) => isRectBuildable(state, segment.tile, segment.footprint));
+}
+
+function wallSegmentsDoNotOverlap(segments: WallLineSegment[]): boolean {
+  const occupied = new Set<string>();
+  for (const segment of segments) {
+    for (let y = 0; y < segment.footprint.h; y += 1) {
+      for (let x = 0; x < segment.footprint.w; x += 1) {
+        const key = `${segment.tile.x + x},${segment.tile.y + y}`;
+        if (occupied.has(key)) {
+          return false;
+        }
+        occupied.add(key);
+      }
+    }
+  }
+  return true;
 }
 
 export function buildingProgressRatio(entity: GameEntity): number {

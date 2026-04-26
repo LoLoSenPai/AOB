@@ -46,6 +46,92 @@ export function registerAnimations(scene: Phaser.Scene): void {
       repeat: meta.repeat,
     });
   }
+
+  create(scene, {
+    key: "element-smoke-idle",
+    textureKey: assetKeys.elements.smoke,
+    frames: 30,
+    frameRate: 8,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "element-windmill-idle",
+    textureKey: assetKeys.elements.windmill,
+    frames: 9,
+    frameRate: 7,
+    repeat: -1,
+  });
+
+  create(scene, {
+    key: "tinySoldier-idle",
+    textureKey: assetKeys.tinyRpg.soldier.idle,
+    frames: 6,
+    frameRate: 6,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinySoldier-walk",
+    textureKey: assetKeys.tinyRpg.soldier.walk,
+    frames: 8,
+    frameRate: 10,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinySoldier-attack",
+    textureKey: assetKeys.tinyRpg.soldier.attack,
+    frames: 7,
+    frameRate: 12,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinySoldier-hurt",
+    textureKey: assetKeys.tinyRpg.soldier.hurt,
+    frames: 4,
+    frameRate: 10,
+    repeat: 0,
+  });
+  create(scene, {
+    key: "tinySoldier-death",
+    textureKey: assetKeys.tinyRpg.soldier.death,
+    frames: 4,
+    frameRate: 8,
+    repeat: 0,
+  });
+  create(scene, {
+    key: "tinyArcher-idle",
+    textureKey: assetKeys.tinyRpg.archer.idle,
+    frames: 6,
+    frameRate: 6,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyArcher-walk",
+    textureKey: assetKeys.tinyRpg.archer.walk,
+    frames: 8,
+    frameRate: 10,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyArcher-attack",
+    textureKey: assetKeys.tinyRpg.archer.attack,
+    frames: 9,
+    frameRate: 13,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyArcher-hurt",
+    textureKey: assetKeys.tinyRpg.archer.hurt,
+    frames: 4,
+    frameRate: 10,
+    repeat: 0,
+  });
+  create(scene, {
+    key: "tinyArcher-death",
+    textureKey: assetKeys.tinyRpg.archer.death,
+    frames: 4,
+    frameRate: 8,
+    repeat: 0,
+  });
 }
 
 function create(scene: Phaser.Scene, config: SheetAnimation): void {

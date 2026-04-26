@@ -1,5 +1,5 @@
 import type { AgeId, PlayerId, ResourceType } from "../../data/constants";
-import type { GameEntity, EntityId } from "../entities/types";
+import type { GameEntity, EntityId, UnitType } from "../entities/types";
 
 export type Vec2 = {
   x: number;
@@ -49,6 +49,18 @@ export type GameMessage = {
   text: string;
 };
 
+export type CombatEvent = {
+  id: number;
+  tick: number;
+  kind: "melee" | "arrow";
+  attackerId: EntityId;
+  targetId: EntityId;
+  attackerUnitType?: UnitType;
+  source: Vec2;
+  target: Vec2;
+  damage: number;
+};
+
 export type ObjectiveProgressState = {
   completedIds: string[];
 };
@@ -63,6 +75,7 @@ export type GameState = {
   entities: Record<EntityId, GameEntity>;
   selection: SelectionState;
   messages: GameMessage[];
+  combatEvents: CombatEvent[];
   objectives: ObjectiveProgressState;
 };
 

@@ -50,6 +50,23 @@ export const assetKeys = {
     hurt: "skeleton-hurt",
     death: "skeleton-death",
   },
+  tinyRpg: {
+    soldier: {
+      idle: "tiny-rpg-soldier-idle",
+      walk: "tiny-rpg-soldier-walk",
+      attack: "tiny-rpg-soldier-attack",
+      hurt: "tiny-rpg-soldier-hurt",
+      death: "tiny-rpg-soldier-death",
+    },
+    archer: {
+      idle: "tiny-rpg-archer-idle",
+      walk: "tiny-rpg-archer-walk",
+      attack: "tiny-rpg-archer-attack",
+      hurt: "tiny-rpg-archer-hurt",
+      death: "tiny-rpg-archer-death",
+    },
+    arrow: "tiny-rpg-arrow",
+  },
   elements: {
     tree1: "element-tree-1",
     tree2: "element-tree-2",
@@ -260,6 +277,10 @@ export const assetKeys = {
   },
   ui: {
     indicator: "ui-indicator",
+    selectBoxTl: "ui-selectbox-tl",
+    selectBoxTr: "ui-selectbox-tr",
+    selectBoxBl: "ui-selectbox-bl",
+    selectBoxBr: "ui-selectbox-br",
   },
 } as const;
 
