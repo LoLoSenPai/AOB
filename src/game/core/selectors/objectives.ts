@@ -1,6 +1,8 @@
 import { PLAYER_ID } from "../../data/constants";
+import { BTC_VILLAGE_DISCOVERY_TILE } from "../../data/mapLayout";
 import type { BuildingType, UnitType } from "../entities/types";
 import type { GameState } from "../state/types";
+import { isTileExplored } from "../systems/visibility";
 
 export type ObjectiveId =
   | "villagers8"
@@ -10,6 +12,7 @@ export type ObjectiveId =
   | "soldiers3"
   | "stable"
   | "scout"
+  | "btcVillage"
   | "exploreMap";
 export type ObjectiveStatus = "todo" | "active" | "done";
 
@@ -82,6 +85,13 @@ export const OBJECTIVE_DEFINITIONS: ObjectiveDefinition[] = [
     detail: "Train a fast scout at the Stable.",
     target: 1,
     progress: (state) => playerUnitCount(state, "scout"),
+  },
+  {
+    id: "btcVillage",
+    title: "BTC Village",
+    detail: "Scout east and reveal the BTC settlement.",
+    target: 1,
+    progress: (state) => (isTileExplored(state, BTC_VILLAGE_DISCOVERY_TILE) ? 1 : 0),
   },
   {
     id: "exploreMap",

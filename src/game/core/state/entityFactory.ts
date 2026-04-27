@@ -103,7 +103,7 @@ export function createBuilding(
     radius: Math.max(config.footprint.w, config.footprint.h) * TILE_SIZE * 0.5,
     visualState: "idle",
     health: {
-      current: completed ? maxHealth : Math.ceil(maxHealth * 0.2),
+      current: completed ? maxHealth : 1,
       max: maxHealth,
     },
     building: {

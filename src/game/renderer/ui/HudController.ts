@@ -1,4 +1,4 @@
-import { PLAYER_ID, RESOURCE_TYPES, TILE_SIZE, type AgeId, type ResourceType } from "../../data/constants";
+import { PLAYER_ID, RESOURCE_TYPES, type AgeId, type ResourceType } from "../../data/constants";
 import { ageConfigs, buildingConfigs, canAfford, costForBuilding, hasReachedAge, labelForBuilding, unitConfigs, wallTierForAge } from "../../data/definitions";
 import type { BuildingType, GameEntity, UnitType } from "../../core/entities/types";
 import { workerTaskCountsForPlayer } from "../../core/selectors/economy";
@@ -8,6 +8,7 @@ import type { GameState } from "../../core/state/types";
 type HudCallbacks = {
   onBuildRequest: (buildingType: BuildingType) => void;
   onOpenBuildMenu: () => void;
+  onOpenBuildCategory: (category: BuildCategoryId) => void;
   onCloseBuildMenu: () => void;
   onCancelPlacement: () => void;
   onClearWallDraft: () => void;
@@ -29,6 +30,7 @@ export type HudRenderContext = {
   wallPlacementCanConfirm: boolean;
   wallOrientationMode: "auto" | "horizontal" | "vertical";
   buildMenuOpen: boolean;
+  buildMenuCategory?: BuildCategoryId;
   camera?: {
     x: number;
     y: number;
@@ -37,13 +39,63 @@ export type HudRenderContext = {
   };
 };
 
-const BUILD_GROUPS: { label: string; buildings: BuildingType[] }[] = [
-  { label: "Economy", buildings: ["house", "farm", "mill", "lumberCamp", "stoneCamp", "goldCamp"] },
-  { label: "Military", buildings: ["barracks", "stable"] },
-  { label: "Defense", buildings: ["watchTower", "wall"] },
+export type BuildCategoryId = "economy" | "military" | "defense";
+
+export const BUILD_GROUPS: {
+  id: BuildCategoryId;
+  label: string;
+  hotkey: string;
+  detail: string;
+  iconBuilding: BuildingType;
+  buildings: BuildingType[];
+}[] = [
+  { id: "economy", label: "Economy", hotkey: "Q", detail: "Housing, farms, and drop-off camps.", iconBuilding: "mill", buildings: ["house", "farm", "mill", "lumberCamp", "stoneCamp", "goldCamp"] },
+  { id: "military", label: "Military", hotkey: "W", detail: "Barracks and cavalry production.", iconBuilding: "stable", buildings: ["barracks", "stable"] },
+  { id: "defense", label: "Defense", hotkey: "E", detail: "Towers and palisade walls.", iconBuilding: "watchTower", buildings: ["watchTower", "wall"] },
 ];
 
 const MAX_VISIBLE_OBJECTIVES = 5;
+
+export const BUILDING_HOTKEYS: Partial<Record<BuildingType, string>> = {
+  house: "Q",
+  farm: "W",
+  mill: "E",
+  lumberCamp: "A",
+  stoneCamp: "S",
+  goldCamp: "D",
+  barracks: "Q",
+  stable: "W",
+  watchTower: "Q",
+  wall: "W",
+};
+
+export const BUILDING_HOTKEYS_BY_CATEGORY: Record<BuildCategoryId, Partial<Record<BuildingType, string>>> = {
+  economy: {
+    house: "Q",
+    farm: "W",
+    mill: "E",
+    lumberCamp: "A",
+    stoneCamp: "S",
+    goldCamp: "D",
+  },
+  military: {
+    barracks: "Q",
+    stable: "W",
+  },
+  defense: {
+    watchTower: "Q",
+    wall: "W",
+  },
+};
+
+export const UNIT_HOTKEYS: Partial<Record<UnitType, string>> = {
+  worker: "Q",
+  soldier: "Q",
+  archer: "E",
+  scout: "Q",
+};
+
+export const ADVANCE_AGE_HOTKEY = "T";
 
 const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
   food: "/assets/sunnyside/elements/wheat_05.png",
@@ -55,6 +107,7 @@ const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
 const POPULATION_ICON_PATH = "/assets/sunnyside/ui/indicator.png";
 const WALL_ICON_PATH = "/last-assets/runtime/wall-palisade-horizontal.png?v=20260424-225617";
 const SOLANA_CREST_PATH = "/assets/aob-map/runtime/solana-ui-crest.png";
+const SOLANA_STABLE_PATH = "/assets/aob-map/solana/buildings/solana-stable-t1.png";
 const UNIT_PORTRAIT_PATHS: Partial<Record<UnitType, string>> = {
   worker: "/assets/ui/portraits/villager.png",
   soldier: "/assets/ui/portraits/knight.png",
@@ -104,9 +157,9 @@ const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> 
     network: "/assets/aob-buildings/static-runtime/barracks-t3.png",
   },
   stable: {
-    genesis: "/assets/aob-buildings/static-runtime/barracks-t1.png",
-    settlement: "/assets/aob-buildings/static-runtime/barracks-t2.png",
-    network: "/assets/aob-buildings/static-runtime/barracks-t3.png",
+    genesis: SOLANA_STABLE_PATH,
+    settlement: SOLANA_STABLE_PATH,
+    network: SOLANA_STABLE_PATH,
   },
   watchTower: {
     genesis: "/assets/aob-buildings/static-runtime/watch-tower-t1.png",
@@ -194,6 +247,14 @@ export class HudController {
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-open-build]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onOpenBuildMenu());
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-build-category]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const category = button.dataset.buildCategory as BuildCategoryId | undefined;
+        if (category) {
+          this.callbacks.onOpenBuildCategory(category);
+        }
+      });
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-close-build]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onCloseBuildMenu());
@@ -341,6 +402,7 @@ function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], st
   const title = panelTitle(primary, selected);
   const details = primary ? detailsFor(primary, selected, state) : "No selection";
   const meta = primary ? panelMeta(primary, selected, state) : "";
+  const stats = primary ? selectionStatsMarkup(primary, selected) : "";
   const extra = primary ? panelExtraMarkup(primary, state) : "";
   return `
     <div class="hud-bottom-panel">
@@ -349,6 +411,7 @@ function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], st
         <div class="hud-panel-heading">
           <div class="hud-panel-title">${title}</div>
           ${meta}
+          ${stats}
         </div>
       </div>
       <div class="hud-panel-grid">
@@ -362,12 +425,11 @@ function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], st
 
 function panelExtraMarkup(primary: GameEntity, state: GameState): string {
   const queue = productionQueueMarkup(primary);
-  const rally = rallyPointMarkup(primary);
   const age = ageProgressMarkup(primary, state);
-  if (!queue && !rally && !age) {
+  if (!queue && !age) {
     return "";
   }
-  return `<div class="hud-panel-extra">${queue}${age}${rally}</div>`;
+  return `<div class="hud-panel-extra">${queue}${age}</div>`;
 }
 
 function productionQueueMarkup(entity: GameEntity): string {
@@ -422,17 +484,6 @@ function ageProgressMarkup(entity: GameEntity, state: GameState): string {
   `;
 }
 
-function rallyPointMarkup(entity: GameEntity): string {
-  if (!entity.producer) {
-    return "";
-  }
-  const rally = entity.producer.rallyPoint;
-  if (!rally) {
-    return `<div class="rally-line">Rally: right click terrain.</div>`;
-  }
-  return `<div class="rally-line">Rally: ${Math.floor(rally.x / TILE_SIZE)}, ${Math.floor(rally.y / TILE_SIZE)}</div>`;
-}
-
 function commandDockMarkup(state: GameState, primary: GameEntity | undefined, context: HudRenderContext): string {
   if (context.placementType) {
     if (context.placementType === "wall") {
@@ -442,11 +493,11 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
       return `
         <div class="command-dock">
           <div class="command-section">
-            <div class="command-label">${labelText}</div>
-            <div class="hud-inline-note">Hold left click, drag the line, release to build.</div>
-            <button class="command-button command-wide" data-toggle-wall-orientation="true">Direction: ${wallOrientationLabel(context.wallOrientationMode)}</button>
-            <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}>Clear Preview</button>
-            <button class="command-button command-wide" data-cancel-placement="true">Exit Wall Mode</button>
+          <div class="command-label">${labelText}</div>
+          <div class="hud-inline-note">Hold left click, drag the line, release to build.</div>
+            <button class="command-button command-wide" data-toggle-wall-orientation="true"><span class="command-title">Direction: ${wallOrientationLabel(context.wallOrientationMode)}</span></button>
+            <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}><span class="command-title">Clear Preview</span></button>
+            <button class="command-button command-wide" data-cancel-placement="true"><span class="command-hotkey">Esc</span><span class="command-title">Exit Wall Mode</span></button>
           </div>
         </div>
       `;
@@ -456,7 +507,7 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
       <div class="command-dock">
         <div class="command-section">
           <div class="command-label">${labelText}</div>
-          <button class="command-button command-wide" data-cancel-placement="true">Cancel</button>
+          <button class="command-button command-wide" data-cancel-placement="true"><span class="command-hotkey">Esc</span><span class="command-title">Cancel</span></button>
         </div>
       </div>
     `;
@@ -469,12 +520,17 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
   const hasWorker = state.selection.selectedIds.some((id) => Boolean(state.entities[id]?.worker && state.entities[id]?.ownerId === PLAYER_ID));
   if (context.buildMenuOpen && hasWorker) {
     const population = populationStatus(state);
+    const title = context.buildMenuCategory ? buildGroupForId(context.buildMenuCategory).label : "Build";
     return `
       <div class="command-dock">
         <div class="command-section">
-          <button class="command-button command-wide" data-close-build="true">Back</button>
+          <button class="command-button command-wide" data-close-build="true"><span class="command-hotkey">Esc</span><span class="command-title">Back</span></button>
+          <div class="command-label command-label--group">
+            <span>${title}</span>
+            <span class="command-label-meta">${context.buildMenuCategory ? "Buildings" : "Categories"}</span>
+          </div>
           ${population.buildHint}
-          ${buildMenuMarkup(state)}
+          ${buildMenuMarkup(state, context.buildMenuCategory)}
         </div>
       </div>
     `;
@@ -485,17 +541,18 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
   const nextAge = ageConfigs[currentAge].nextAge;
   const ageButton =
     primary?.building?.type === "townCenter" && nextAge
-      ? `<button class="command-button" data-advance="true" ${state.players[PLAYER_ID].ageProgress ? "disabled" : ""}><span class="command-title">Advance</span><span class="command-subtitle">${ageConfigs[nextAge].label}</span>${costLabel(ageConfigs[currentAge].advanceCost)}</button>`
+      ? `<button class="command-button" data-advance="true" ${state.players[PLAYER_ID].ageProgress ? "disabled" : ""}>${hotkeyBadge(ADVANCE_AGE_HOTKEY)}<span class="command-title">Advance</span><span class="command-subtitle">${ageConfigs[nextAge].label}</span>${costLabel(ageConfigs[currentAge].advanceCost)}</button>`
       : "";
   const reseedButton =
     primary?.farm && primary.farm.depleted
       ? `<button class="command-button" data-reseed="${primary.id}">Reseed<br>${costLabel(primary.farm.reseedCost)}</button>`
       : "";
-  const workerCommands = hasWorker ? `<div class="command-label">Villager</div><div class="command-grid"><button class="command-button" data-open-build="true">Build</button></div>` : "";
+  const workerCommands = hasWorker ? `<div class="command-label">Villager</div><div class="command-grid"><button class="command-button" data-open-build="true">${hotkeyBadge("B")}<span class="command-title">Build</span></button></div>` : "";
+  const townCenterUtilityButtons = townCenterUtilityMarkup(primary, state);
   const lifecycleButtons = buildingLifecycleButtons(primary);
   const buildingCommands =
-    trainButtons || ageButton || reseedButton || lifecycleButtons
-      ? `${trainButtons ? `<div class="command-label">Produce</div><div class="command-grid">${trainButtons}${ageButton}</div>` : ""}${!trainButtons && ageButton ? `<div class="command-label">Town Center</div><div class="command-grid">${ageButton}</div>` : ""}${reseedButton ? `<div class="command-label">Farm</div><div class="command-grid">${reseedButton}</div>` : ""}${lifecycleButtons ? `<div class="command-label">Structure</div><div class="command-grid">${lifecycleButtons}</div>` : ""}`
+    trainButtons || ageButton || reseedButton || lifecycleButtons || townCenterUtilityButtons
+      ? `${trainButtons ? `<div class="command-label">Produce</div><div class="command-grid">${trainButtons}${ageButton}</div>` : ""}${!trainButtons && ageButton ? `<div class="command-label">Town Center</div><div class="command-grid">${ageButton}</div>` : ""}${townCenterUtilityButtons}${reseedButton ? `<div class="command-label">Farm</div><div class="command-grid">${reseedButton}</div>` : ""}${lifecycleButtons ? `<div class="command-label">Structure</div><div class="command-grid">${lifecycleButtons}</div>` : ""}`
       : "";
 
   if (!workerCommands && !buildingCommands) {
@@ -512,17 +569,35 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
   `;
 }
 
+function townCenterUtilityMarkup(primary: GameEntity | undefined, state: GameState): string {
+  if (primary?.building?.type !== "townCenter" || !primary.building.completed || primary.ownerId !== PLAYER_ID) {
+    return "";
+  }
+  const idle = workerTaskCountsForPlayer(state).idle;
+  return `
+    <div class="command-label">Town Center</div>
+    <div class="command-grid">
+      <button class="command-button" data-select-idle="true">
+        ${hotkeyBadge(".")}
+        ${unitPortraitMarkup("worker", "command-unit-icon")}
+        <span class="command-title">Idle Villager</span>
+        <span class="command-subtitle">${idle} available</span>
+      </button>
+    </div>
+  `;
+}
+
 function buildingLifecycleButtons(primary: GameEntity | undefined): string {
   if (!primary?.building || primary.ownerId !== PLAYER_ID) {
     return "";
   }
   if (!primary.building.completed) {
-    return `<button class="command-button command-button--danger" data-cancel-construction="${primary.id}"><span class="command-title">Cancel</span><span class="command-subtitle">Refund</span></button>`;
+    return `<button class="command-button command-button--danger" data-cancel-construction="${primary.id}">${hotkeyBadge("Del")}<span class="command-title">Cancel</span><span class="command-subtitle">Refund</span></button>`;
   }
   if (primary.building.type === "townCenter") {
     return "";
   }
-  return `<button class="command-button command-button--danger" data-destroy-building="${primary.id}"><span class="command-title">Destroy</span><span class="command-subtitle">Delete</span></button>`;
+  return `<button class="command-button command-button--danger" data-destroy-building="${primary.id}">${hotkeyBadge("Del")}<span class="command-title">Destroy</span><span class="command-subtitle">Delete</span></button>`;
 }
 
 function wallOrientationLabel(mode: HudRenderContext["wallOrientationMode"]): string {
@@ -536,34 +611,66 @@ function wallOrientationLabel(mode: HudRenderContext["wallOrientationMode"]): st
   }
 }
 
-function buildMenuMarkup(state: GameState): string {
-  return BUILD_GROUPS.map((group) => {
-    const buttons = group.buildings.map((type) => buildButton(state, type)).join("");
-    return `<div class="command-label">${group.label}</div><div class="command-grid">${buttons}</div>`;
-  }).join("");
+function buildMenuMarkup(state: GameState, category: BuildCategoryId | undefined): string {
+  if (!category) {
+    return buildCategoryMenuMarkup(state);
+  }
+
+  const group = buildGroupForId(category);
+  const buttons = group.buildings.map((type) => buildButton(state, type, category)).join("");
+  return `
+    <div class="command-group command-group--active">
+      <div class="command-label command-label--group">
+        <span>${group.label}</span>
+        <span class="command-label-meta">${group.buildings.length} options</span>
+      </div>
+      <div class="command-grid command-grid--build">${buttons}</div>
+    </div>
+  `;
 }
 
-function buildButton(state: GameState, type: BuildingType): string {
+function buildCategoryMenuMarkup(state: GameState): string {
+  return `
+    <div class="command-category-grid">
+      ${BUILD_GROUPS.map((group) => buildCategoryButton(state, group)).join("")}
+    </div>
+  `;
+}
+
+function buildCategoryButton(state: GameState, group: (typeof BUILD_GROUPS)[number]): string {
+  const playerAge = state.players[PLAYER_ID].age;
+  const unlocked = group.buildings.filter((type) => hasReachedAge(playerAge, buildingConfigs[type].unlockedAge)).length;
+  const iconPath = buildingIconPath(group.iconBuilding, playerAge);
+  const icon = iconPath ? commandIconMarkup(iconPath, "command-icon-frame--category") : "";
+  return `
+    <button class="command-button command-category-button" data-build-category="${group.id}">
+      ${hotkeyBadge(group.hotkey)}
+      ${icon}
+      <span class="command-category-copy">
+        <span class="command-title">${group.label}</span>
+        <span class="command-category-detail">${group.detail}</span>
+        <span class="command-subtitle">${unlocked}/${group.buildings.length} unlocked</span>
+      </span>
+    </button>
+  `;
+}
+
+function buildButton(state: GameState, type: BuildingType, category: BuildCategoryId): string {
   const player = state.players[PLAYER_ID];
   const config = buildingConfigs[type];
   const cost = costForBuilding(type, player.age);
   const locked = !hasReachedAge(player.age, config.unlockedAge);
   const affordable = canAfford(player.resources, cost);
-  const disabled = locked || !affordable;
+  const disabled = locked;
   const labelText = shortLabel(labelForBuilding(type, player.age));
   const population = populationStatus(state);
   const suggested = type === "house" && population.blocked;
-  const subtitle = locked
-    ? ageConfigs[config.unlockedAge].label
-    : suggested
-      ? "Need cap"
-      : affordable
-        ? undefined
-        : "Need res.";
+  const subtitle = locked ? ageConfigs[config.unlockedAge].label : undefined;
   const body = subtitle ? `<span class="lock-label">${subtitle}</span>` : costLabel(cost);
   const iconPath = buildingIconPath(type, player.age);
-  const icon = iconPath ? `<img class="command-icon" src="${iconPath}" alt="">` : "";
-  return `<button class="command-button ${suggested ? "command-button--suggested" : ""}" data-build="${type}" ${disabled ? "disabled" : ""}>${icon}<span class="command-title">${labelText}</span>${body}</button>`;
+  const icon = iconPath ? commandIconMarkup(iconPath) : "";
+  const classes = ["command-button", suggested ? "command-button--suggested" : "", !affordable ? "command-button--blocked" : ""].filter(Boolean).join(" ");
+  return `<button class="${classes}" data-build="${type}" ${disabled ? "disabled" : ""}>${hotkeyBadge(BUILDING_HOTKEYS_BY_CATEGORY[category][type])}${icon}<span class="command-title">${labelText}</span>${body}</button>`;
 }
 
 function producerButtons(entity: GameEntity, state: GameState): string {
@@ -575,12 +682,25 @@ function producerButtons(entity: GameEntity, state: GameState): string {
       const locked = !hasReachedAge(state.players[PLAYER_ID].age, config.unlockedAge);
       const affordable = canAfford(state.players[PLAYER_ID].resources, config.cost);
       const blockedByPopulation = population.usedWithQueue + config.population > population.cap;
-      const disabled = locked || !affordable || blockedByPopulation;
-      const reason = locked ? ageConfigs[config.unlockedAge].label : blockedByPopulation ? "Need House" : !affordable ? "Need res." : undefined;
+      const disabled = locked;
+      const reason = locked ? ageConfigs[config.unlockedAge].label : undefined;
       const body = reason ? `<span class="lock-label">${reason}</span>` : costLabel(config.cost);
-      return `<button class="command-button ${blockedByPopulation ? "command-button--blocked" : ""}" data-train="${type}" ${disabled ? "disabled" : ""}>${unitPortraitMarkup(type, "command-unit-icon")}<span class="command-title">${shortLabel(config.label)}</span>${body}</button>`;
+      const classes = ["command-button", blockedByPopulation || !affordable ? "command-button--blocked" : ""].filter(Boolean).join(" ");
+      return `<button class="${classes}" data-train="${type}" ${disabled ? "disabled" : ""}>${hotkeyBadge(UNIT_HOTKEYS[type])}${unitPortraitMarkup(type, "command-unit-icon")}<span class="command-title">${shortLabel(config.label)}</span>${body}</button>`;
     })
     .join("");
+}
+
+function commandIconMarkup(path: string, extraClass = ""): string {
+  return `<span class="command-icon-frame ${extraClass}"><img class="command-icon" src="${path}" alt=""></span>`;
+}
+
+function hotkeyBadge(hotkey: string | undefined): string {
+  return hotkey ? `<span class="command-hotkey">${hotkey}</span>` : "";
+}
+
+function buildGroupForId(id: BuildCategoryId): (typeof BUILD_GROUPS)[number] {
+  return BUILD_GROUPS.find((group) => group.id === id) ?? BUILD_GROUPS[0];
 }
 
 function messagesMarkup(state: GameState): string {
@@ -668,6 +788,56 @@ function panelTitle(primary: GameEntity | undefined, selected: GameEntity[]): st
   return primary.label;
 }
 
+function selectionStatsMarkup(primary: GameEntity, selected: GameEntity[]): string {
+  if (selected.length > 1) {
+    const workers = selected.filter((entity) => entity.worker).length;
+    const fighters = selected.filter((entity) => entity.combat).length;
+    const idle = selected.filter((entity) => entity.worker && !entity.worker.task && !entity.worker.carrying && !entity.mobile?.target && (entity.mobile?.path.length ?? 0) === 0).length;
+    return `<div class="hud-stat-row">${statBadge("Units", selected.length)}${statBadge("Villagers", workers)}${statBadge("Combat", fighters)}${statBadge("Idle", idle)}</div>`;
+  }
+
+  if (primary.unit) {
+    const config = unitConfigs[primary.unit.type];
+    const combat = config.combat;
+    const stats = [
+      statBadge("HP", primary.health ? `${Math.ceil(primary.health.current)}/${primary.health.max}` : "-"),
+      statBadge("Speed", Math.round(config.speed)),
+      combat ? statBadge("Damage", combat.damage) : "",
+      combat ? statBadge("Range", combat.range) : "",
+      config.population > 0 ? statBadge("Pop", config.population) : "",
+    ].filter(Boolean);
+    return `<div class="hud-stat-row">${stats.join("")}</div>`;
+  }
+
+  if (primary.building) {
+    const config = buildingConfigs[primary.building.type];
+    const status = primary.building.completed ? "Ready" : `${Math.round((primary.building.buildProgress / Math.max(1, primary.building.buildTimeTicks)) * 100)}%`;
+    const stats = [
+      statBadge("HP", primary.health ? `${Math.ceil(primary.health.current)}/${primary.health.max}` : "-"),
+      statBadge("Status", status),
+      primary.producer ? statBadge("Queue", primary.producer.queue.length) : "",
+      config.providesPopulation ? statBadge("Pop", `+${config.providesPopulation}`) : "",
+      primary.farm ? statBadge("Food", `${Math.ceil(primary.farm.food)}/${primary.farm.maxFood}`) : "",
+      primary.storage ? statBadge("Stores", primary.storage.accepts.map(label).join("/")) : "",
+    ].filter(Boolean);
+    return `<div class="hud-stat-row">${stats.join("")}</div>`;
+  }
+
+  if (primary.farm) {
+    return `<div class="hud-stat-row">${statBadge("Food", `${Math.ceil(primary.farm.food)}/${primary.farm.maxFood}`)}</div>`;
+  }
+
+  if (primary.resourceNode) {
+    return `<div class="hud-stat-row">${statBadge("Amount", Math.ceil(primary.resourceNode.amount))}${statBadge("Type", label(primary.resourceNode.resourceType))}</div>`;
+  }
+
+  return "";
+}
+
+function statBadge(labelText: string, value: string | number): string {
+  return `<span class="hud-stat"><span class="hud-stat-label">${labelText}</span><strong>${value}</strong></span>`;
+}
+
 function selectionPortrait(primary: GameEntity | undefined, selected: GameEntity[], state: GameState): string {
   if (!primary) {
     return "";
@@ -742,7 +912,6 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
     return `<span><strong>Villagers:</strong> ${workers}</span><span><strong>Infantry:</strong> ${fighters}</span><span><strong>Idle:</strong> ${idle}</span><span><strong>Gathering:</strong> ${gathering}</span><span><strong>Building:</strong> ${building}</span><span><strong>Repairing:</strong> ${repairing}</span>`;
   }
 
-  const health = primary.health ? `<span><strong>Health:</strong> ${Math.max(0, Math.ceil(primary.health.current))}/${primary.health.max}</span>` : "";
   const build = primary.building
     ? `<span><strong>Status:</strong> ${primary.building.completed ? "Built" : `${Math.round((primary.building.buildProgress / primary.building.buildTimeTicks) * 100)}%`}</span>`
     : "";
@@ -755,7 +924,7 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
   const ownerAge = primary.ownerId ? state.players[primary.ownerId]?.age : undefined;
   const wall = primary.building?.type === "wall" && ownerAge ? `<span><strong>Tier:</strong> ${wallTierForAge(ownerAge).label}</span>` : "";
 
-  return `${health}${build}${wall}${farm}${storage}${populationCap}${carried}${task}${resource}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
+  return `${build}${wall}${farm}${storage}${populationCap}${carried}${task}${resource}` || `<span><strong>Type:</strong> ${primary.kind}</span>`;
 }
 
 function selectionHelp(primary: GameEntity | undefined, state: GameState): string {

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { PLAYER_ID, TILE_SIZE, type AgeId } from "../../data/constants";
 import { assetKeys, type HumanAction } from "../../data/assets";
 import { buildingConfigs, wallTierForAge } from "../../data/definitions";
-import { initialMapLayout, type VisualOverlay } from "../../data/mapLayout";
+import { BTC_VILLAGE_DISCOVERY_TILE, initialMapLayout, type VisualOverlay } from "../../data/mapLayout";
 import {
   grassDetailFrames,
   villagePropFrames,
@@ -20,7 +20,7 @@ import {
   worldSpriteOverlayVisuals,
   type AtlasFrameDef,
 } from "../../data/visuals";
-import type { BuildingType, EntityId, GameEntity } from "../../core/entities/types";
+import type { BuildingType, EntityId, GameEntity, UnitType } from "../../core/entities/types";
 import { idleWorkerIdsForPlayer, workerTaskCountsForPlayer } from "../../core/selectors/economy";
 import { objectiveViewsForState } from "../../core/selectors/objectives";
 import { Simulation } from "../../core/simulation/Simulation";
@@ -30,7 +30,18 @@ import { canPlaceBuildingAt, canPlaceWallSegmentsAt } from "../../core/systems/s
 import { exploredTileRatio, isTileExplored, isWorldPositionExplored } from "../../core/systems/visibility";
 import { wallLineSegments, type WallLineDirection, type WallLineSegment } from "../../core/systems/wallPlacement";
 import { registerAnimations } from "../world/AnimationRegistry";
-import { HudController, type HudRenderContext } from "../ui/HudController";
+import {
+  ADVANCE_AGE_HOTKEY,
+  BUILD_GROUPS,
+  BUILDING_HOTKEYS_BY_CATEGORY,
+  HudController,
+  UNIT_HOTKEYS,
+  type BuildCategoryId,
+  type HudRenderContext,
+} from "../ui/HudController";
+
+const BUILD_CATEGORY_BY_HOTKEY: ReadonlyMap<string, BuildCategoryId> = new Map(BUILD_GROUPS.map((group) => [group.hotkey, group.id]));
+const UNIT_TYPE_BY_HOTKEY: ReadonlyMap<string, UnitType> = new Map(Object.entries(UNIT_HOTKEYS).map(([type, hotkey]) => [hotkey, type as UnitType]));
 
 type EntityView = {
   container: Phaser.GameObjects.Container;
@@ -163,6 +174,7 @@ export class WorldScene extends Phaser.Scene {
   private wallDragStartTile?: TileCoord;
   private wallOrientationMode: WallOrientationMode = "auto";
   private buildMenuOpen = false;
+  private buildMenuCategory?: BuildCategoryId;
   private previousSelectedIds = new Set<EntityId>();
   private hoveredEntityId?: EntityId;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -344,6 +356,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateCursor();
     if (this.buildMenuOpen && this.selectedWorkerIds().length === 0) {
       this.buildMenuOpen = false;
+      this.buildMenuCategory = undefined;
     }
     this.hud.render(this.simulation.state, this.createHudRenderContext());
   }
@@ -701,6 +714,7 @@ export class WorldScene extends Phaser.Scene {
 
   private createInput(): void {
     this.keys = this.input.keyboard?.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,ESC,SPACE,F,H,B,PERIOD,ENTER,DELETE") as Record<string, Phaser.Input.Keyboard.Key>;
+    this.input.keyboard?.on("keydown", this.handleCommandHotkey, this);
     this.input.mouse?.disableContextMenu();
     this.setCursor("default");
 
@@ -774,16 +788,23 @@ export class WorldScene extends Phaser.Scene {
     }
     this.hud = new HudController(root, {
       onBuildRequest: (buildingType) => {
-        this.placementType = buildingType;
-        this.wallDraft = undefined;
-        this.buildMenuOpen = false;
+        this.startBuildingPlacement(buildingType);
       },
       onOpenBuildMenu: () => {
         this.buildMenuOpen = true;
+        this.buildMenuCategory = undefined;
         this.playUiClick(520, 0.02);
       },
+      onOpenBuildCategory: (category) => {
+        this.buildMenuCategory = category;
+        this.playUiClick(560, 0.018);
+      },
       onCloseBuildMenu: () => {
-        this.buildMenuOpen = false;
+        if (this.buildMenuCategory) {
+          this.buildMenuCategory = undefined;
+        } else {
+          this.buildMenuOpen = false;
+        }
         this.playUiClick(420, 0.018);
       },
       onCancelPlacement: () => {
@@ -859,6 +880,7 @@ export class WorldScene extends Phaser.Scene {
       wallPlacementCanConfirm: Boolean(this.wallDraft) && wallDraftSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallDraftSegments),
       wallOrientationMode: this.wallOrientationMode,
       buildMenuOpen: this.buildMenuOpen,
+      buildMenuCategory: this.buildMenuCategory,
       camera: {
         x: Math.max(0, camera.scrollX),
         y: Math.max(0, camera.scrollY),
@@ -914,6 +936,7 @@ export class WorldScene extends Phaser.Scene {
         visuals: {
           ruins: this.ruinViews.size,
           exploredRatio: exploredTileRatio(state),
+          btcVillageDiscovered: isTileExplored(state, BTC_VILLAGE_DISCOVERY_TILE),
         },
         workerTasks: workerTaskCountsForPlayer(state),
         wallDraft: this.wallDraft
@@ -983,10 +1006,11 @@ export class WorldScene extends Phaser.Scene {
   private updateCamera(delta: number): void {
     const camera = this.cameras.main;
     const speed = (delta / 1000) * 420 / camera.zoom;
-    const left = this.keys.A?.isDown || this.keys.LEFT?.isDown;
-    const right = this.keys.D?.isDown || this.keys.RIGHT?.isDown;
-    const up = this.keys.W?.isDown || this.keys.UP?.isDown;
-    const down = this.keys.S?.isDown || this.keys.DOWN?.isDown;
+    const allowKeyboardPan = !this.buildMenuOpen;
+    const left = allowKeyboardPan && (this.keys.A?.isDown || this.keys.LEFT?.isDown);
+    const right = allowKeyboardPan && (this.keys.D?.isDown || this.keys.RIGHT?.isDown);
+    const up = allowKeyboardPan && (this.keys.W?.isDown || this.keys.UP?.isDown);
+    const down = allowKeyboardPan && (this.keys.S?.isDown || this.keys.DOWN?.isDown);
 
     if (left) {
       camera.scrollX -= speed;
@@ -1005,7 +1029,11 @@ export class WorldScene extends Phaser.Scene {
       if (this.placementType) {
         this.cancelPlacement();
       } else if (this.buildMenuOpen) {
-        this.buildMenuOpen = false;
+        if (this.buildMenuCategory) {
+          this.buildMenuCategory = undefined;
+        } else {
+          this.buildMenuOpen = false;
+        }
       }
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.ENTER) && this.placementType === "wall") {
@@ -1020,6 +1048,7 @@ export class WorldScene extends Phaser.Scene {
     if (Phaser.Input.Keyboard.JustDown(this.keys.B) && this.selectedWorkerIds().length > 0) {
       this.cancelPlacement();
       this.buildMenuOpen = true;
+      this.buildMenuCategory = undefined;
     }
     if (Phaser.Input.Keyboard.JustDown(this.keys.DELETE)) {
       this.destroyOrCancelSelectedBuilding();
@@ -1031,6 +1060,68 @@ export class WorldScene extends Phaser.Scene {
         this.scale.startFullscreen();
       }
     }
+  }
+
+  private handleCommandHotkey(event: KeyboardEvent): void {
+    if (event.repeat || this.placementType) {
+      return;
+    }
+
+    const key = commandKeyFromEvent(event);
+    if (this.buildMenuOpen && this.selectedWorkerIds().length > 0) {
+      if (!this.buildMenuCategory) {
+        const category = BUILD_CATEGORY_BY_HOTKEY.get(key);
+        if (category) {
+          event.preventDefault();
+          this.buildMenuCategory = category;
+          this.playUiClick(560, 0.018);
+        }
+        return;
+      }
+
+      const buildingType = buildingTypeForCategoryHotkey(this.buildMenuCategory, key);
+      if (buildingType) {
+        event.preventDefault();
+        this.startBuildingPlacement(buildingType);
+      }
+      return;
+    }
+
+    const producer = this.getSelectedProducerBuilding();
+    if (producer?.building?.completed) {
+      const unitType = UNIT_TYPE_BY_HOTKEY.get(key);
+      const producerTypes = buildingConfigs[producer.building.type].producer ?? [];
+      if (unitType && producerTypes.includes(unitType)) {
+        event.preventDefault();
+        this.simulation.dispatch({
+          type: "trainUnit",
+          playerId: PLAYER_ID,
+          buildingId: producer.id,
+          unitType,
+        });
+        return;
+      }
+    }
+
+    if (key === ADVANCE_AGE_HOTKEY) {
+      const townCenter = this.getSelectedBuilding("townCenter");
+      if (townCenter) {
+        event.preventDefault();
+        this.simulation.dispatch({
+          type: "advanceAge",
+          playerId: PLAYER_ID,
+          buildingId: townCenter.id,
+        });
+      }
+    }
+  }
+
+  private startBuildingPlacement(buildingType: BuildingType): void {
+    this.placementType = buildingType;
+    this.wallDraft = undefined;
+    this.buildMenuOpen = false;
+    this.buildMenuCategory = undefined;
+    this.playUiClick(540, 0.018);
   }
 
   private cancelPlacement(): void {
@@ -1103,6 +1194,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.cancelPlacement();
     this.buildMenuOpen = false;
+    this.buildMenuCategory = undefined;
     this.simulation.dispatch({
       type: "selectUnits",
       playerId: PLAYER_ID,
@@ -1839,7 +1931,8 @@ export class WorldScene extends Phaser.Scene {
     if (entity.building) {
       const ownerAge = entity.ownerId ? this.simulation.state.players[entity.ownerId]?.age ?? "genesis" : "genesis";
       const bounds = buildingInteractionBounds(entity, ownerAge);
-      this.showSelectionCorners(view, bounds, color, selected ? 1 : constructing ? 0.72 : alpha, selected || constructing);
+      const selectorBounds = entity.building.type === "wall" ? bounds : { ...bounds, y: bounds.y - 8 };
+      this.showSelectionCorners(view, selectorBounds, color, selected ? 1 : constructing ? 0.72 : alpha, selected || constructing);
       return;
     }
     if (selected) {
@@ -1887,7 +1980,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     const width = entity.building ? Math.max(28, entity.building.footprint.w * TILE_SIZE) : 24;
-    const y = entity.building ? buildingHealthBarY(entity) : -39;
+    const y = entity.building ? buildingHealthBarY(entity) : unitHealthBarY(entity);
     const ratio = Phaser.Math.Clamp(entity.health.current / entity.health.max, 0, 1);
     view.health.fillStyle(0x251914, 0.9);
     view.health.fillRect(-width / 2, y, width, 4);
@@ -3005,9 +3098,13 @@ function buildingSpriteBaselineY(entity: GameEntity): number {
 
 function buildingHealthBarY(entity: GameEntity): number {
   if (!entity.building) {
-    return -39;
+    return unitHealthBarY(entity);
   }
   return buildingSpriteBaselineY(entity) - buildingRenderedVisualSize(entity) - 8;
+}
+
+function unitHealthBarY(entity: GameEntity): number {
+  return entity.unit?.type === "scout" ? -51 : -39;
 }
 
 function mouseButton(pointer: Phaser.Input.Pointer): number {
@@ -3016,6 +3113,16 @@ function mouseButton(pointer: Phaser.Input.Pointer): number {
     return event.button;
   }
   return pointer.leftButtonDown() ? 0 : pointer.rightButtonDown() ? 2 : 0;
+}
+
+function commandKeyFromEvent(event: KeyboardEvent): string {
+  return event.key.length === 1 ? event.key.toUpperCase() : event.key.toUpperCase();
+}
+
+function buildingTypeForCategoryHotkey(category: BuildCategoryId, key: string): BuildingType | undefined {
+  const hotkeys = BUILDING_HOTKEYS_BY_CATEGORY[category];
+  const match = Object.entries(hotkeys).find(([, hotkey]) => hotkey === key);
+  return match?.[0] as BuildingType | undefined;
 }
 
 function numericId(id: string): number {

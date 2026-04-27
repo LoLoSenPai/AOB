@@ -382,7 +382,7 @@ canvas {
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 58px;
+  min-height: 68px;
   margin-bottom: 8px;
 }
 
@@ -491,6 +491,41 @@ canvas {
   color: var(--hud-muted);
   font-size: 12px;
   min-height: 17px;
+}
+
+.hud-stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.hud-stat {
+  min-width: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 6px;
+  background:
+    linear-gradient(180deg, rgba(39, 31, 24, 0.92), rgba(8, 10, 10, 0.9)),
+    radial-gradient(circle at 50% 0%, rgba(101, 223, 229, 0.08), transparent 65%);
+  border: 1px solid rgba(198, 153, 74, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.04);
+  color: var(--hud-text);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.hud-stat-label {
+  color: #bfa979;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.hud-stat strong {
+  color: #fff1bd;
+  font-weight: 800;
 }
 
 .hud-healthbar {
@@ -635,10 +670,33 @@ canvas {
   gap: 9px;
 }
 
+.command-group {
+  display: grid;
+  gap: 7px;
+  padding: 7px;
+  background:
+    linear-gradient(180deg, rgba(29, 25, 20, 0.68), rgba(6, 8, 9, 0.48)),
+    radial-gradient(circle at 100% 0%, rgba(101, 223, 229, 0.06), transparent 45%);
+  border: 1px solid rgba(198, 153, 74, 0.26);
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.03);
+}
+
 .command-label {
   color: #ffe0a0;
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.command-label--group {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 18px;
+}
+
+.command-label-meta {
+  color: #a99060;
+  font-size: 10px;
 }
 
 .hud-inline-note {
@@ -661,6 +719,38 @@ canvas {
   gap: 7px;
 }
 
+.command-category-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.command-category-button {
+  min-height: 94px;
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  align-items: center;
+  justify-content: initial;
+  gap: 10px;
+  padding: 10px 12px 10px 14px;
+  text-align: left;
+}
+
+.command-category-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.command-category-detail {
+  color: #d7bf86;
+  font-size: 11px;
+  line-height: 1.18;
+}
+
+.command-grid--build .command-button {
+  min-height: 78px;
+}
+
 .command-button {
   position: relative;
   min-height: 58px;
@@ -677,6 +767,7 @@ canvas {
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+  overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(255, 226, 153, 0.06), inset 0 -3px 0 rgba(0, 0, 0, 0.28);
 }
 
@@ -689,11 +780,55 @@ canvas {
 }
 
 .command-icon {
-  width: 30px;
-  height: 24px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   image-rendering: auto;
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.55));
+}
+
+.command-icon-frame {
+  width: 42px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(101, 223, 229, 0.12), transparent 72%),
+    rgba(4, 6, 7, 0.34);
+  border: 1px solid rgba(198, 153, 74, 0.24);
+}
+
+.command-grid--build .command-icon-frame {
+  width: 52px;
+  height: 38px;
+}
+
+.command-icon-frame--category {
+  width: 64px;
+  height: 54px;
+}
+
+.command-hotkey {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 1;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 7, 0.74);
+  border: 1px solid rgba(240, 195, 107, 0.58);
+  color: #ffe7ad;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.38);
 }
 
 .command-title {
@@ -757,9 +892,15 @@ canvas {
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(130, 198, 92, 0.2);
 }
 
-.command-button--blocked:disabled {
+.command-button--blocked {
   border-color: rgba(216, 106, 84, 0.8);
   color: #c89a92;
+  background:
+    linear-gradient(180deg, rgba(73, 50, 38, 0.98), rgba(28, 24, 22, 0.98)),
+    radial-gradient(circle at 50% 0%, rgba(216, 106, 84, 0.1), transparent 55%);
+}
+
+.command-button--blocked:disabled {
   filter: grayscale(0.2) brightness(0.78);
 }
 

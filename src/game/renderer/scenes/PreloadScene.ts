@@ -306,6 +306,7 @@ export class PreloadScene extends Phaser.Scene {
   private loadAobBuildingStaticAssets(): void {
     const root = "/assets/aob-buildings/static-runtime";
     const ruinsRoot = "/assets/aob-buildings/ruins";
+    const solanaBuildingRoot = "/assets/aob-map/solana/buildings";
     this.load.image(assetKeys.aobBuildingStatic.construction, `${root}/construction.png`);
     this.load.image(assetKeys.aobBuildingStatic.townCenter.genesis, "/last-assets/hdv-t1.png");
     this.load.image(assetKeys.aobBuildingStatic.townCenter.settlement, "/last-assets/hdv-t2.png");
@@ -331,9 +332,9 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobBuildingStatic.barracks.genesis, `${root}/barracks-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.barracks.settlement, `${root}/barracks-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.barracks.network, `${root}/barracks-t3.png`);
-    this.load.image(assetKeys.aobBuildingStatic.stable.genesis, `${root}/barracks-t1.png`);
-    this.load.image(assetKeys.aobBuildingStatic.stable.settlement, `${root}/barracks-t2.png`);
-    this.load.image(assetKeys.aobBuildingStatic.stable.network, `${root}/barracks-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.genesis, `${solanaBuildingRoot}/solana-stable-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.settlement, `${solanaBuildingRoot}/solana-stable-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.network, `${solanaBuildingRoot}/solana-stable-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.genesis, `${root}/watch-tower-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.settlement, `${root}/watch-tower-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.network, `${root}/watch-tower-t3.png`);

@@ -39,6 +39,8 @@ export type MapLayout = {
   };
 };
 
+export const BTC_VILLAGE_DISCOVERY_TILE: TileCoord = { x: 154, y: 62 };
+
 export type VisualOverlay =
   | {
       kind: "villageGround" | "pathDecal";
@@ -99,16 +101,16 @@ export type VisualOverlay =
     };
 
 export const initialMapLayout: MapLayout = {
-  width: 192,
-  height: 160,
+  width: 224,
+  height: 176,
   terrain: [
     { kind: "ellipse", tile: "water", cx: 16, cy: 106, rx: 28, ry: 27 },
     { kind: "rect", tile: "water", x: 0, y: 112, w: 38, h: 16 },
     { kind: "ellipse", tile: "water", cx: 2, cy: 96, rx: 12, ry: 18 },
     { kind: "rect", tile: "water", x: 0, y: 128, w: 58, h: 32 },
-    { kind: "ellipse", tile: "water", cx: 178, cy: 42, rx: 23, ry: 48 },
-    { kind: "ellipse", tile: "water", cx: 180, cy: 142, rx: 34, ry: 24 },
-    { kind: "rect", tile: "water", x: 184, y: 0, w: 8, h: 160 },
+    { kind: "ellipse", tile: "water", cx: 210, cy: 42, rx: 23, ry: 48 },
+    { kind: "ellipse", tile: "water", cx: 212, cy: 142, rx: 34, ry: 24 },
+    { kind: "rect", tile: "water", x: 216, y: 0, w: 8, h: 176 },
 
     { kind: "ellipse", tile: "dirt", cx: 102, cy: 43, rx: 25, ry: 24 },
     { kind: "rect", tile: "dirt", x: 82, y: 52, w: 32, h: 14 },

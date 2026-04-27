@@ -9,12 +9,13 @@ import {
   labelForBuilding,
   resourceConfigs,
   unitConfigs,
+  type Cost,
 } from "../../data/definitions";
 import type { GameCommand, WallPathSegmentDraft } from "../commands/types";
 import type { EntityId, GameEntity } from "../entities/types";
 import { createBuilding, worldFromTile } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
-import type { GameState, TileCoord, Vec2 } from "../state/types";
+import type { GameState, ResourceStock, TileCoord, Vec2 } from "../state/types";
 import { clampToMap, distance, findFreeAdjacentTiles, findNearestFreeAdjacentTile, isRectBuildable, isTileWalkableForUnit, tileCenter, worldToTile } from "./mapQueries";
 import { stampBuildingGround } from "./mapEditing";
 import { findPath } from "./pathfinding";
@@ -172,7 +173,7 @@ function applyBuildStructure(
   }
   const cost = costForBuilding(buildingType, player.age);
   if (!canAfford(player.resources, cost)) {
-    addMessage(state, "Not enough resources.");
+    addMessage(state, resourceShortageMessage(player.resources, cost));
     return;
   }
   if (!isRectBuildable(state, tile, config.footprint)) {
@@ -309,7 +310,7 @@ function applyBuildWallSegments(state: GameState, playerId: PlayerId, segments: 
 
   const totalCost = multiplyCost(costForBuilding("wall", player.age), segments.length);
   if (!canAfford(player.resources, totalCost)) {
-    addMessage(state, "Not enough resources.");
+    addMessage(state, resourceShortageMessage(player.resources, totalCost));
     return;
   }
 
@@ -388,7 +389,7 @@ function applyTrainUnit(state: GameState, playerId: PlayerId, buildingId: Entity
     return;
   }
   if (!canAfford(player.resources, unitConfig.cost)) {
-    addMessage(state, "Not enough resources.");
+    addMessage(state, resourceShortageMessage(player.resources, unitConfig.cost));
     return;
   }
 
@@ -432,7 +433,7 @@ function applyAdvanceAge(state: GameState, playerId: PlayerId, explicitTarget?: 
   }
   const targetConfig = ageConfigs[targetAge];
   if (!canAfford(player.resources, currentAge.advanceCost)) {
-    addMessage(state, "Not enough resources to advance age.");
+    addMessage(state, resourceShortageMessage(player.resources, currentAge.advanceCost));
     return;
   }
   player.resources = applyCost(player.resources, currentAge.advanceCost, -1);
@@ -555,6 +556,22 @@ function scaleCost(cost: Partial<Record<ResourceType, number>>, multiplier: numb
     stone: cost.stone ? Math.floor(cost.stone * multiplier) : undefined,
     gold: cost.gold ? Math.floor(cost.gold * multiplier) : undefined,
   };
+}
+
+function resourceShortageMessage(stock: ResourceStock, cost: Cost): string {
+  const missing = (["food", "wood", "stone", "gold"] as ResourceType[])
+    .filter((resource) => (cost[resource] ?? 0) > stock[resource])
+    .map((resource) => `${(cost[resource] ?? 0) - stock[resource]} ${resource}`)
+    .join(", ");
+  const total = costSummary(cost);
+  return missing ? `Need ${missing}. Cost: ${total}.` : `Need resources. Cost: ${total}.`;
+}
+
+function costSummary(cost: Cost): string {
+  const parts = (["food", "wood", "stone", "gold"] as ResourceType[])
+    .filter((resource) => (cost[resource] ?? 0) > 0)
+    .map((resource) => `${cost[resource]} ${resource}`);
+  return parts.length > 0 ? parts.join(", ") : "free";
 }
 
 function isGatherableTarget(entity: GameEntity | undefined): entity is GameEntity {

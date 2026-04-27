@@ -160,8 +160,9 @@ function runGatheringSystem(state: GameState): void {
       }
       task.phase = "toStorage";
       task.storageId = storage.id;
-      worker.mobile.target = storage.position;
-      worker.mobile.path = findPath(state, worker.position, storage.position);
+      const dropoff = storageDropoffTarget(state, worker.position, storage);
+      worker.mobile.target = dropoff;
+      worker.mobile.path = findPath(state, worker.position, dropoff);
       worker.visualState = "carrying";
       continue;
     }
@@ -172,7 +173,7 @@ function runGatheringSystem(state: GameState): void {
         delete worker.worker.task;
         continue;
       }
-      if (distance(worker.position, storage.position) <= worker.radius + storage.radius + 8) {
+      if (isWorkerAtStorageDropoff(worker, storage)) {
         const carried = worker.worker.carrying;
         if (carried) {
           state.players[PLAYER_ID].resources[carried.type] += carried.amount;
@@ -194,11 +195,33 @@ function runGatheringSystem(state: GameState): void {
           worker.visualState = "idle";
         }
       } else if (!worker.mobile.target && worker.mobile.path.length === 0) {
-        worker.mobile.target = storage.position;
-        worker.mobile.path = findPath(state, worker.position, storage.position);
+        const dropoff = storageDropoffTarget(state, worker.position, storage);
+        worker.mobile.target = dropoff;
+        worker.mobile.path = findPath(state, worker.position, dropoff);
       }
     }
   }
+}
+
+function storageDropoffTarget(state: GameState, from: { x: number; y: number }, storage: GameEntity): { x: number; y: number } {
+  const adjacent = findFreeAdjacentTiles(state, storage, from)[0];
+  return adjacent ? tileCenter(adjacent) : storage.position;
+}
+
+function isWorkerAtStorageDropoff(worker: GameEntity, storage: GameEntity): boolean {
+  const origin = storage.tile;
+  const footprint = storage.building?.footprint;
+  if (origin && footprint) {
+    const tile = worldToTile(worker.position);
+    const insideExpandedFootprint =
+      tile.x >= origin.x - 1 && tile.x <= origin.x + footprint.w && tile.y >= origin.y - 1 && tile.y <= origin.y + footprint.h;
+    const insideStructure = tile.x >= origin.x && tile.x < origin.x + footprint.w && tile.y >= origin.y && tile.y < origin.y + footprint.h;
+    if (insideExpandedFootprint && !insideStructure) {
+      return true;
+    }
+  }
+
+  return distance(worker.position, storage.position) <= worker.radius + storage.radius + 18;
 }
 
 function getGatherable(entity: GameEntity | undefined): { resourceType: "food" | "wood" | "stone" | "gold"; amount: number; gatherAmount: number } | undefined {
@@ -482,7 +505,7 @@ function runProductionSystem(state: GameState): void {
     if (item.remainingTicks > 0) {
       continue;
     }
-    const spawnTile = findNearestFreeAdjacentTile(state, building);
+    const spawnTile = findProducerSpawnTile(state, building);
     if (!spawnTile) {
       item.remainingTicks = 5;
       continue;
@@ -493,6 +516,36 @@ function runProductionSystem(state: GameState): void {
     building.producer.queue.shift();
     addMessage(state, `${unitConfigs[item.unitType].label} trained.`);
   }
+}
+
+function findProducerSpawnTile(state: GameState, building: GameEntity): TileCoord | undefined {
+  const origin = building.tile;
+  const footprint = building.building?.footprint;
+  if (!origin || !footprint) {
+    return findNearestFreeAdjacentTile(state, building);
+  }
+
+  const centerX = origin.x + (footprint.w - 1) / 2;
+  const frontY = origin.y + footprint.h;
+  const frontTiles = Array.from({ length: footprint.w }, (_, index) => ({ x: origin.x + index, y: frontY })).sort(
+    (a, b) => Math.abs(a.x - centerX) - Math.abs(b.x - centerX),
+  );
+  const fallbackTiles = findFreeAdjacentTiles(state, building);
+  const candidates = [...frontTiles, ...fallbackTiles];
+  const seen = new Set<string>();
+
+  for (const tile of candidates) {
+    const key = `${tile.x},${tile.y}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    if (isTileWalkableForUnit(state, tile)) {
+      return tile;
+    }
+  }
+
+  return undefined;
 }
 
 function assignProducedUnitToRally(state: GameState, building: GameEntity, unit: GameEntity): void {
@@ -628,6 +681,9 @@ function runObjectiveSystem(state: GameState): void {
       continue;
     }
     state.objectives.completedIds.push(id);
+    if (id === "btcVillage") {
+      addMessage(state, "BTC settlement discovered.");
+    }
     addMessage(state, `Objective complete: ${objectiveTitle(id)}.`);
   }
 }
