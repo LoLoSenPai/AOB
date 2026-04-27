@@ -156,23 +156,23 @@ export class PreloadScene extends Phaser.Scene {
   private loadAobMapAssets(): void {
     const root = "/assets/aob-map/runtime";
     const legacyRoot = "/assets/aob-map/optimized";
-    const newMapRoot = "/new-map";
+    const terrainRoot = "/assets/aob-map/terrain";
     this.load.image(assetKeys.aobMap.baseGrass, "/last-assets/grass-256x256.png");
-    this.load.image(assetKeys.aobMap.baseDirt, `${newMapRoot}/base-dirt.png`);
-    this.load.image(assetKeys.aobMap.baseRocky, `${newMapRoot}/base-rocky.png`);
-    this.load.image(assetKeys.aobMap.baseShallowWater, `${newMapRoot}/base-shallow-water.png`);
-    this.load.image(assetKeys.aobMap.deepWater, `${newMapRoot}/deep-water.png`);
-    this.load.image(assetKeys.aobMap.grassDirtEdge, `${newMapRoot}/grass-to-dirt-v.png`);
-    this.load.image(assetKeys.aobMap.grassDirtCornerOuter, `${newMapRoot}/grass-dirt-corner-outer.png`);
-    this.load.image(assetKeys.aobMap.grassDirtCornerInner, `${newMapRoot}/grass-dirt-corner-inner.png`);
-    this.load.image(assetKeys.aobMap.grassStoneEdge, `${newMapRoot}/grass-stone-edge-vertical.png`);
-    this.load.image(assetKeys.aobMap.grassStoneCornerOuter, `${newMapRoot}/grass-stone-corner-outer.png`);
-    this.load.image(assetKeys.aobMap.grassStoneCornerInner, `${newMapRoot}/grass-stone-corner-inner.png`);
-    this.load.image(assetKeys.aobMap.dirtStoneEdge, `${newMapRoot}/dirt-stone-edge.png`);
-    this.load.image(assetKeys.aobMap.dirtStoneCornerOuter, `${newMapRoot}/dirt-stone-corner-outer.png`);
-    this.load.image(assetKeys.aobMap.dirtStoneCornerInner, `${newMapRoot}/dirt-stone-corner-inner.png`);
-    this.load.image(assetKeys.aobMap.cliffCornerOuter, `${newMapRoot}/cliff-corner-outer.png`);
-    this.load.image(assetKeys.aobMap.crystalGround, `${newMapRoot}/crystal-ground.png`);
+    this.load.image(assetKeys.aobMap.baseDirt, `${terrainRoot}/base-dirt.png`);
+    this.load.image(assetKeys.aobMap.baseRocky, `${terrainRoot}/base-rocky.png`);
+    this.load.image(assetKeys.aobMap.baseShallowWater, `${terrainRoot}/base-shallow-water.png`);
+    this.load.image(assetKeys.aobMap.deepWater, `${terrainRoot}/deep-water.png`);
+    this.load.image(assetKeys.aobMap.grassDirtEdge, `${terrainRoot}/grass-to-dirt-v.png`);
+    this.load.image(assetKeys.aobMap.grassDirtCornerOuter, `${terrainRoot}/grass-dirt-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.grassDirtCornerInner, `${terrainRoot}/grass-dirt-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.grassStoneEdge, `${terrainRoot}/grass-stone-edge-vertical.png`);
+    this.load.image(assetKeys.aobMap.grassStoneCornerOuter, `${terrainRoot}/grass-stone-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.grassStoneCornerInner, `${terrainRoot}/grass-stone-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneEdge, `${terrainRoot}/dirt-stone-edge.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneCornerOuter, `${terrainRoot}/dirt-stone-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.dirtStoneCornerInner, `${terrainRoot}/dirt-stone-corner-inner.png`);
+    this.load.image(assetKeys.aobMap.cliffCornerOuter, `${terrainRoot}/cliff-corner-outer.png`);
+    this.load.image(assetKeys.aobMap.crystalGround, `${terrainRoot}/crystal-ground.png`);
     this.load.image(assetKeys.aobMap.trees, `${root}/trees.png`);
     this.load.image(assetKeys.aobMap.treesAlt, `${root}/trees-alt.png`);
     this.load.image(assetKeys.aobMap.pineTree, `${root}/pine-tree.png`);
@@ -202,10 +202,10 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobMap.logStack, `${root}/log-stack.png`);
     this.load.image(assetKeys.aobMap.trough, `${root}/trough.png`);
     this.load.image(assetKeys.aobMap.bench, `${root}/bench.png`);
-    this.load.image(assetKeys.aobMap.shoreEdge, `${newMapRoot}/shore-edge.png`);
-    this.load.image(assetKeys.aobMap.shoreCorner, `${newMapRoot}/shore-corner.png`);
-    this.load.image(assetKeys.aobMap.cliffEdge, `${newMapRoot}/cliff-edge.png`);
-    this.load.image(assetKeys.aobMap.crystalCliffEdge, `${newMapRoot}/crystal-cliff-edge.png`);
+    this.load.image(assetKeys.aobMap.shoreEdge, `${terrainRoot}/shore-edge.png`);
+    this.load.image(assetKeys.aobMap.shoreCorner, `${terrainRoot}/shore-corner.png`);
+    this.load.image(assetKeys.aobMap.cliffEdge, `${terrainRoot}/cliff-edge.png`);
+    this.load.image(assetKeys.aobMap.crystalCliffEdge, `${terrainRoot}/crystal-cliff-edge.png`);
     this.load.image(assetKeys.aobMap.campfire, `${legacyRoot}/campfire.png`);
     this.load.image(assetKeys.aobMap.solanaVillageGround, `/assets/aob-map/solana/terrain/solana-ground-plaza-large.png`);
     this.load.image(assetKeys.aobMap.solanaPathDecal, `${root}/solana-path-decal.png`);
@@ -275,6 +275,32 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobMap.solanaSacks, `/assets/aob-map/solana/props/solana-sacks.png`);
     this.load.image(assetKeys.aobMap.solanaValidatorObelisk, `/assets/aob-map/solana/props/solana-validator-obelisk.png`);
     this.load.image(assetKeys.aobMap.solanaFenceCorner, `/assets/aob-map/solana/props/solana-fence-corner.png`);
+
+    const btcRoot = "/assets/aob-map/btc";
+    this.load.image(assetKeys.aobMap.btcTownCenterT1, `${btcRoot}/buildings/btc-town-center-t1.png`);
+    this.load.image(assetKeys.aobMap.btcHouseT1, `${btcRoot}/buildings/btc-house-t1.png`);
+    this.load.image(assetKeys.aobMap.btcBarracksT1, `${btcRoot}/buildings/btc-barracks-t1.png`);
+    this.load.image(assetKeys.aobMap.btcStableT1, `${btcRoot}/buildings/btc-stable-t1.png`);
+    this.load.image(assetKeys.aobMap.btcWatchtowerT1, `${btcRoot}/buildings/btc-watchtower-t1.png`);
+    this.load.image(assetKeys.aobMap.btcMiningCampT1, `${btcRoot}/buildings/btc-mining-camp-t1.png`);
+    this.load.image(assetKeys.aobMap.btcForge, `${btcRoot}/props/btc-forge.png`);
+    this.load.image(assetKeys.aobMap.btcMarketStall, `${btcRoot}/props/btc-market-stall.png`);
+    this.load.image(assetKeys.aobMap.btcBanner, `${btcRoot}/props/btc-banner.png`);
+    this.load.image(assetKeys.aobMap.btcLanternPost, `${btcRoot}/props/btc-lantern-post.png`);
+    this.load.image(assetKeys.aobMap.btcCrateStack, `${btcRoot}/props/btc-crate-stack.png`);
+    this.load.image(assetKeys.aobMap.btcMiningCart, `${btcRoot}/props/btc-mining-cart.png`);
+    this.load.image(assetKeys.aobMap.btcStoneObelisk, `${btcRoot}/props/btc-stone-obelisk.png`);
+    this.load.image(assetKeys.aobMap.btcCampfire, `${btcRoot}/props/btc-campfire.png`);
+    this.load.image(assetKeys.aobMap.btcDeadTreeStump, `${btcRoot}/props/btc-dead-tree-stump.png`);
+    this.load.image(assetKeys.aobMap.btcGoldOreLarge, `${btcRoot}/resources/btc-gold-ore-large.png`);
+    this.load.image(assetKeys.aobMap.btcGoldOreSmall, `${btcRoot}/resources/btc-gold-ore-small.png`);
+    this.load.image(assetKeys.aobMap.btcDarkRockLarge, `${btcRoot}/resources/btc-dark-rock-large.png`);
+    this.load.image(assetKeys.aobMap.btcDarkRockSmall, `${btcRoot}/resources/btc-dark-rock-small.png`);
+    this.load.image(assetKeys.aobMap.btcCopperGroundDecal, `${btcRoot}/terrain/btc-copper-ground-decal.png`);
+    this.load.image(assetKeys.aobMap.btcMiningPlazaDecal, `${btcRoot}/terrain/btc-mining-plaza-decal.png`);
+    this.load.image(assetKeys.aobMap.btcWallHorizontal, `${btcRoot}/walls/btc-wall-horizontal.png`);
+    this.load.image(assetKeys.aobMap.btcGateHorizontal, `${btcRoot}/walls/btc-gate-horizontal.png`);
+    this.load.image(assetKeys.aobMap.btcGateOpenHorizontal, `${btcRoot}/walls/btc-gate-open-horizontal.png`);
   }
 
   private loadAobBuildingStaticAssets(): void {

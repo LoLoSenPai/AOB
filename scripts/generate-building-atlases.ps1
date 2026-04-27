@@ -1,5 +1,6 @@
 param(
   [string]$PublicRoot = (Join-Path $PSScriptRoot "..\public"),
+  [string]$SourceRoot = (Join-Path $PublicRoot "_source\aob-buildings\raw"),
   [string]$OutputRoot = (Join-Path $PublicRoot "assets\aob-buildings\static-runtime")
 )
 
@@ -159,7 +160,7 @@ function Export-NormalizedSprite {
 function Build-TieredSprites {
   param([hashtable]$SourceConfig)
 
-  $sourcePath = Join-Path $PublicRoot $SourceConfig.Source
+  $sourcePath = Join-Path $SourceRoot $SourceConfig.Source
   if (-not (Test-Path $sourcePath)) {
     throw "Missing source image: $sourcePath"
   }
@@ -189,7 +190,7 @@ function Build-TieredSprites {
 }
 
 function Build-ConstructionSprite {
-  $sourcePath = Join-Path $PublicRoot "construction.png"
+  $sourcePath = Join-Path $SourceRoot "construction.png"
   if (-not (Test-Path $sourcePath)) {
     throw "Missing construction image: $sourcePath"
   }

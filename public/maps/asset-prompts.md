@@ -67,9 +67,9 @@ Generate these as separate PNG files:
 
 Status after visual review on 2026-04-26:
 
-- `public/4` road curves, diagonals, and straight segments are usable as freeform decals. Use them only in their native orientation; do not rotate them in code.
-- `public/5` is partly usable. `solana-road-t-north` and `solana-road-t-south` are visually the same, so only the south-facing T was copied into the stable asset folder. Regenerate the T/end-cap correction batch below before relying on junctions.
-- `public/6` and `public/7` look good as terrain overlay decals, but not as strict autotiles. They are rounded painterly patches, so place them manually to hide square terrain seams instead of using them as edge tiles.
+- `public/_source/solana-generated/batches/batch-04` road curves, diagonals, and straight segments are usable as freeform decals. Use them only in their native orientation; do not rotate them in code.
+- `public/_source/solana-generated/batches/batch-05` is partly usable. `solana-road-t-north` and `solana-road-t-south` are visually the same, so only the south-facing T was copied into the stable asset folder. Regenerate the T/end-cap correction batch below before relying on junctions.
+- `public/_source/solana-generated/batches/batch-06` and `public/_source/solana-generated/batches/batch-07` look good as terrain overlay decals, but not as strict autotiles. They are rounded painterly patches, so place them manually to hide square terrain seams instead of using them as edge tiles.
 - Contact shadows are paused for now because generated shadows made buildings feel like they were floating.
 
 Stable copies were placed under:

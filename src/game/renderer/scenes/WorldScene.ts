@@ -17,6 +17,7 @@ import {
   terrainVisualFor,
   TERRAIN_STAMP_TILES,
   visualOverlayVisuals,
+  worldSpriteOverlayVisuals,
   type AtlasFrameDef,
 } from "../../data/visuals";
 import type { BuildingType, EntityId, GameEntity } from "../../core/entities/types";
@@ -588,6 +589,19 @@ export class WorldScene extends Phaser.Scene {
         .setAlpha(overlay.alpha ?? 1);
       return;
     }
+    if (overlay.kind === "worldSprite") {
+      const visual = worldSpriteOverlayVisuals[overlay.asset];
+      this.add
+        .image(worldX, worldY, visual.key)
+        .setOrigin(visual.originX, visual.originY)
+        .setDisplaySize(overlay.width, overlay.height ?? overlay.width)
+        .setAngle(overlay.angle ?? 0)
+        .setFlipX(Boolean(overlay.flipX))
+        .setFlipY(Boolean(overlay.flipY))
+        .setDepth(visual.depth === 0 ? worldY + (overlay.depthOffset ?? 0) : visual.depth + (overlay.depthOffset ?? 0))
+        .setAlpha(overlay.alpha ?? 1);
+      return;
+    }
     const visual = visualOverlayVisuals[overlay.kind];
     if (!("frame" in overlay)) {
       this.add
@@ -860,6 +874,7 @@ export class WorldScene extends Phaser.Scene {
       advanceTime?: (milliseconds: number) => void;
       setCameraTile?: (x: number, y: number, zoom?: number) => void;
       setPlayerResources?: (resources: Partial<ResourceStock>) => void;
+      revealTileArea?: (x: number, y: number, radius?: number) => void;
     };
     debugWindow.render_game_to_text = () => {
       const state = this.simulation.state;
@@ -939,6 +954,29 @@ export class WorldScene extends Phaser.Scene {
     debugWindow.setPlayerResources = (resources: Partial<ResourceStock>) => {
       Object.assign(this.simulation.state.players[PLAYER_ID].resources, resources);
       this.hud.render(this.simulation.state, this.createHudRenderContext());
+    };
+    debugWindow.revealTileArea = (x: number, y: number, radius = 16) => {
+      const state = this.simulation.state;
+      const centerX = Math.round(x);
+      const centerY = Math.round(y);
+      const clampedRadius = Phaser.Math.Clamp(Math.round(radius), 1, 40);
+      for (let tileY = centerY - clampedRadius; tileY <= centerY + clampedRadius; tileY += 1) {
+        if (tileY < 0 || tileY >= state.map.height) {
+          continue;
+        }
+        for (let tileX = centerX - clampedRadius; tileX <= centerX + clampedRadius; tileX += 1) {
+          if (tileX < 0 || tileX >= state.map.width) {
+            continue;
+          }
+          const dx = tileX - centerX;
+          const dy = tileY - centerY;
+          if (dx * dx + dy * dy <= clampedRadius * clampedRadius) {
+            state.visibility.exploredTiles[tileY * state.map.width + tileX] = true;
+          }
+        }
+      }
+      this.updateFogOverlay(true);
+      this.hud.render(state, this.createHudRenderContext());
     };
   }
 

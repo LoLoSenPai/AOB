@@ -1,5 +1,6 @@
 param(
   [string]$PublicRoot = (Join-Path $PSScriptRoot "..\public"),
+  [string]$SourceRoot = (Join-Path $PublicRoot "_source\aob-map\atlases"),
   [string]$OutputRoot = (Join-Path $PublicRoot "assets\aob-map\runtime")
 )
 
@@ -214,9 +215,9 @@ function Export-ResizedCrop {
 }
 
 function Build-TerrainSheet {
-  $atlas1Path = Join-Path $PublicRoot "new\atlas-map-1.png"
-  $atlas2Path = Join-Path $PublicRoot "new\atlas-map-2-new.png"
-  $atlas5Path = Join-Path $PublicRoot "new\atlas-map-5.png"
+  $atlas1Path = Join-Path $SourceRoot "atlas-map-1.png"
+  $atlas2Path = Join-Path $SourceRoot "atlas-map-2-new.png"
+  $atlas5Path = Join-Path $SourceRoot "atlas-map-5.png"
   $legacyPath = Join-Path $PublicRoot "assets\aob-map\optimized\terrain-tiles-128-clean.png"
 
   $atlas1 = [System.Drawing.Bitmap]::FromFile($atlas1Path)
@@ -266,56 +267,42 @@ function Build-TerrainSheet {
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
 
 $transparentSprites = @(
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 0; Row = 0; Output = "trees.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 1; Row = 0; Output = "trees-alt.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 0; Output = "pine-tree.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 2; Row = 1; Output = "bush.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 3; Row = 1; Output = "fruit-bush.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 1; Output = "flower-patch.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 5; Row = 1; Output = "grass-patch.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 3; Row = 2; Output = "rock.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 2; Output = "rocks.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 0; Row = 3; Output = "stump.png" },
-  @{ Source = "new\atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 3; Output = "crystal-sprout.png" },
-  @{ Source = "new\atlas-map-4.png"; Columns = 6; Rows = 3; Column = 0; Row = 0; Output = "big-rocks.png" },
-  @{ Source = "new\atlas-map-4.png"; Columns = 6; Rows = 3; Column = 2; Row = 0; Output = "stone-node-alt.png" },
-  @{ Source = "new\atlas-map-4.png"; Columns = 6; Rows = 3; Column = 0; Row = 1; Output = "crystal-node.png" },
-  @{ Source = "new\atlas-map-4.png"; Columns = 6; Rows = 3; Column = 4; Row = 1; Output = "crystal-node-alt.png" },
-  @{ Source = "new\atlas-map-4.png"; Columns = 6; Rows = 3; Column = 3; Row = 2; Output = "wood-pile.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 0; Output = "crates.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 0; Output = "barrels.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 0; Row = 1; Output = "sacks.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 1; Row = 1; Output = "fence.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 1; Output = "fence-corner.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 3; Row = 1; Output = "sign.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 1; Output = "flag.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 1; Output = "torch.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 2; Output = "cart.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 2; Output = "well.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 2; Output = "anvil.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 0; Row = 3; Output = "log-stack.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 1; Row = 3; Output = "trough.png" },
-  @{ Source = "new\atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 3; Output = "bench.png" }
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 0; Row = 0; Output = "trees.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 1; Row = 0; Output = "trees-alt.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 0; Output = "pine-tree.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 2; Row = 1; Output = "bush.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 3; Row = 1; Output = "fruit-bush.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 1; Output = "flower-patch.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 5; Row = 1; Output = "grass-patch.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 3; Row = 2; Output = "rock.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 2; Output = "rocks.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 0; Row = 3; Output = "stump.png" },
+  @{ Source = "atlas-map-3.png"; Columns = 6; Rows = 4; Column = 4; Row = 3; Output = "crystal-sprout.png" },
+  @{ Source = "atlas-map-4.png"; Columns = 6; Rows = 3; Column = 0; Row = 0; Output = "big-rocks.png" },
+  @{ Source = "atlas-map-4.png"; Columns = 6; Rows = 3; Column = 2; Row = 0; Output = "stone-node-alt.png" },
+  @{ Source = "atlas-map-4.png"; Columns = 6; Rows = 3; Column = 0; Row = 1; Output = "crystal-node.png" },
+  @{ Source = "atlas-map-4.png"; Columns = 6; Rows = 3; Column = 4; Row = 1; Output = "crystal-node-alt.png" },
+  @{ Source = "atlas-map-4.png"; Columns = 6; Rows = 3; Column = 3; Row = 2; Output = "wood-pile.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 0; Output = "crates.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 0; Output = "barrels.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 0; Row = 1; Output = "sacks.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 1; Row = 1; Output = "fence.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 1; Output = "fence-corner.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 3; Row = 1; Output = "sign.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 1; Output = "flag.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 1; Output = "torch.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 2; Output = "cart.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 4; Row = 2; Output = "well.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 5; Row = 2; Output = "anvil.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 0; Row = 3; Output = "log-stack.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 1; Row = 3; Output = "trough.png" },
+  @{ Source = "atlas-map-5.png"; Columns = 6; Rows = 4; Column = 2; Row = 3; Output = "bench.png" }
 )
 
 foreach ($sprite in $transparentSprites) {
-  $sourcePath = Join-Path $PublicRoot $sprite.Source
+  $sourcePath = Join-Path $SourceRoot $sprite.Source
   $outputPath = Join-Path $OutputRoot $sprite.Output
   Export-TrimmedGridSprite -SourcePath $sourcePath -Columns $sprite.Columns -Rows $sprite.Rows -Column $sprite.Column -Row $sprite.Row -OutputPath $outputPath
-  Write-Output "Generated $outputPath"
-}
-
-$overlayCells = @(
-  @{ Source = "new\atlas-map-2-new.png"; Columns = 7; Rows = 5; Column = 4; Row = 3; Output = "shore-edge.png"; InsetX = 10; InsetY = 14 },
-  @{ Source = "new\atlas-map-2-new.png"; Columns = 7; Rows = 5; Column = 0; Row = 4; Output = "shore-corner.png"; InsetX = 10; InsetY = 10 },
-  @{ Source = "new\atlas-map-2-new.png"; Columns = 7; Rows = 5; Column = 3; Row = 4; Output = "cliff-edge.png"; InsetX = 10; InsetY = 14 },
-  @{ Source = "new\atlas-map-2-new.png"; Columns = 7; Rows = 5; Column = 6; Row = 4; Output = "crystal-cliff-edge.png"; InsetX = 10; InsetY = 14 }
-)
-
-foreach ($cell in $overlayCells) {
-  $sourcePath = Join-Path $PublicRoot $cell.Source
-  $outputPath = Join-Path $OutputRoot $cell.Output
-  Export-GridCell -SourcePath $sourcePath -Columns $cell.Columns -Rows $cell.Rows -Column $cell.Column -Row $cell.Row -OutputPath $outputPath -InsetX $cell.InsetX -InsetY $cell.InsetY
   Write-Output "Generated $outputPath"
 }
 

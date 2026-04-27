@@ -90,7 +90,33 @@ export type ImageDecalKey =
   | "shoreEdgeEast"
   | "shoreEdgeNorth"
   | "shoreEdgeSouth"
-  | "shoreEdgeWest";
+  | "shoreEdgeWest"
+  | "btcCopperGround"
+  | "btcMiningPlaza";
+
+export type WorldSpriteOverlayKey =
+  | "btcTownCenterT1"
+  | "btcHouseT1"
+  | "btcBarracksT1"
+  | "btcStableT1"
+  | "btcWatchtowerT1"
+  | "btcMiningCampT1"
+  | "btcForge"
+  | "btcMarketStall"
+  | "btcBanner"
+  | "btcLanternPost"
+  | "btcCrateStack"
+  | "btcMiningCart"
+  | "btcStoneObelisk"
+  | "btcCampfire"
+  | "btcDeadTreeStump"
+  | "btcGoldOreLarge"
+  | "btcGoldOreSmall"
+  | "btcDarkRockLarge"
+  | "btcDarkRockSmall"
+  | "btcWallHorizontal"
+  | "btcGateHorizontal"
+  | "btcGateOpenHorizontal";
 
 export type GrassDetailFrame =
   | "crystalFlowers"
@@ -377,6 +403,33 @@ export const imageDecalVisuals: Record<ImageDecalKey, VisualOverlayDef> = {
   shoreEdgeNorth: { key: assetKeys.aobMap.solanaShoreEdgeNorth, originX: 0.5, originY: 0.5, depth: TERRAIN_DECAL_DEPTH },
   shoreEdgeSouth: { key: assetKeys.aobMap.solanaShoreEdgeSouth, originX: 0.5, originY: 0.5, depth: TERRAIN_DECAL_DEPTH },
   shoreEdgeWest: { key: assetKeys.aobMap.solanaShoreEdgeWest, originX: 0.5, originY: 0.5, depth: TERRAIN_DECAL_DEPTH },
+  btcCopperGround: { key: assetKeys.aobMap.btcCopperGroundDecal, originX: 0.5, originY: 0.5, depth: TERRAIN_DECAL_DEPTH - 4 },
+  btcMiningPlaza: { key: assetKeys.aobMap.btcMiningPlazaDecal, originX: 0.5, originY: 0.5, depth: TERRAIN_DECAL_DEPTH - 2 },
+};
+
+export const worldSpriteOverlayVisuals: Record<WorldSpriteOverlayKey, VisualOverlayDef> = {
+  btcTownCenterT1: { key: assetKeys.aobMap.btcTownCenterT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcHouseT1: { key: assetKeys.aobMap.btcHouseT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcBarracksT1: { key: assetKeys.aobMap.btcBarracksT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcStableT1: { key: assetKeys.aobMap.btcStableT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcWatchtowerT1: { key: assetKeys.aobMap.btcWatchtowerT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcMiningCampT1: { key: assetKeys.aobMap.btcMiningCampT1, originX: 0.5, originY: 0.98, depth: 0 },
+  btcForge: { key: assetKeys.aobMap.btcForge, originX: 0.5, originY: 0.98, depth: 0 },
+  btcMarketStall: { key: assetKeys.aobMap.btcMarketStall, originX: 0.5, originY: 0.98, depth: 0 },
+  btcBanner: { key: assetKeys.aobMap.btcBanner, originX: 0.5, originY: 0.98, depth: 0 },
+  btcLanternPost: { key: assetKeys.aobMap.btcLanternPost, originX: 0.5, originY: 0.98, depth: 0 },
+  btcCrateStack: { key: assetKeys.aobMap.btcCrateStack, originX: 0.5, originY: 0.92, depth: 0 },
+  btcMiningCart: { key: assetKeys.aobMap.btcMiningCart, originX: 0.5, originY: 0.92, depth: 0 },
+  btcStoneObelisk: { key: assetKeys.aobMap.btcStoneObelisk, originX: 0.5, originY: 0.98, depth: 0 },
+  btcCampfire: { key: assetKeys.aobMap.btcCampfire, originX: 0.5, originY: 0.86, depth: 0 },
+  btcDeadTreeStump: { key: assetKeys.aobMap.btcDeadTreeStump, originX: 0.5, originY: 0.88, depth: 0 },
+  btcGoldOreLarge: { key: assetKeys.aobMap.btcGoldOreLarge, originX: 0.5, originY: 0.9, depth: 0 },
+  btcGoldOreSmall: { key: assetKeys.aobMap.btcGoldOreSmall, originX: 0.5, originY: 0.9, depth: 0 },
+  btcDarkRockLarge: { key: assetKeys.aobMap.btcDarkRockLarge, originX: 0.5, originY: 0.9, depth: 0 },
+  btcDarkRockSmall: { key: assetKeys.aobMap.btcDarkRockSmall, originX: 0.5, originY: 0.9, depth: 0 },
+  btcWallHorizontal: { key: assetKeys.aobMap.btcWallHorizontal, originX: 0.5, originY: 0.88, depth: 0 },
+  btcGateHorizontal: { key: assetKeys.aobMap.btcGateHorizontal, originX: 0.5, originY: 0.9, depth: 0 },
+  btcGateOpenHorizontal: { key: assetKeys.aobMap.btcGateOpenHorizontal, originX: 0.5, originY: 0.9, depth: 0 },
 };
 
 export const grassDetailFrames: Record<GrassDetailFrame, AtlasFrameDef> = {
