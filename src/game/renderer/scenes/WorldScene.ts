@@ -27,7 +27,7 @@ import type { BuildingEvent, CombatEvent, MapState, ResourceStock, TileCoord, Ti
 import { worldToTile } from "../../core/systems/mapQueries";
 import { canPlaceBuildingAt, canPlaceWallSegmentsAt } from "../../core/systems/simulationSystems";
 import { exploredTileRatio, isTileExplored, isWorldPositionExplored } from "../../core/systems/visibility";
-import { wallLineSegments, type WallLineSegment } from "../../core/systems/wallPlacement";
+import { wallLineSegments, type WallLineDirection, type WallLineSegment } from "../../core/systems/wallPlacement";
 import { registerAnimations } from "../world/AnimationRegistry";
 import { HudController, type HudRenderContext } from "../ui/HudController";
 
@@ -83,6 +83,8 @@ type WallSpriteVisual = {
 type WallDraft = {
   points: TileCoord[];
 };
+
+type WallOrientationMode = "auto" | WallLineDirection;
 
 const TERRAIN_BASE_DEPTH = -1000;
 const TERRAIN_TRANSITION_DEPTH = -950;
@@ -157,6 +159,8 @@ export class WorldScene extends Phaser.Scene {
   private readonly wallPreviewSprites: Phaser.GameObjects.Sprite[] = [];
   private placementType?: BuildingType;
   private wallDraft?: WallDraft;
+  private wallDragStartTile?: TileCoord;
+  private wallOrientationMode: WallOrientationMode = "auto";
   private buildMenuOpen = false;
   private previousSelectedIds = new Set<EntityId>();
   private hoveredEntityId?: EntityId;
@@ -696,7 +700,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       if (this.placementType === "wall") {
-        this.clearSelectionDrag();
+        this.startWallDrag(pointer);
         return;
       }
       this.dragStartWorld = { x: pointer.worldX, y: pointer.worldY };
@@ -706,6 +710,10 @@ export class WorldScene extends Phaser.Scene {
     this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
       if (this.isPanning) {
         this.updateMousePan(pointer);
+        return;
+      }
+      if (this.placementType === "wall") {
+        this.clearSelectionDrag();
         return;
       }
       this.drawDragRect(pointer);
@@ -719,7 +727,7 @@ export class WorldScene extends Phaser.Scene {
       const button = mouseButton(pointer);
       if (button === 2) {
         if (this.placementType === "wall") {
-          this.finishWallDraftOrCancel();
+          this.cancelWallDraftOrPlacement();
           return;
         }
         if (this.placementType) {
@@ -730,7 +738,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       if (button === 0 && this.placementType === "wall") {
-        this.handleWallPlacementClick(pointer);
+        this.finishWallDrag(pointer);
         return;
       }
       if (button === 0) {
@@ -769,6 +777,9 @@ export class WorldScene extends Phaser.Scene {
       },
       onClearWallDraft: () => {
         this.clearWallDraft();
+      },
+      onToggleWallOrientation: () => {
+        this.toggleWallOrientation();
       },
       onConfirmPlacement: () => {
         this.confirmWallDraft();
@@ -832,6 +843,7 @@ export class WorldScene extends Phaser.Scene {
       wallLineStarted: Boolean(this.wallDraft),
       wallSegmentCount: wallDraftSegments.length,
       wallPlacementCanConfirm: Boolean(this.wallDraft) && wallDraftSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallDraftSegments),
+      wallOrientationMode: this.wallOrientationMode,
       buildMenuOpen: this.buildMenuOpen,
       camera: {
         x: Math.max(0, camera.scrollX),
@@ -994,25 +1006,22 @@ export class WorldScene extends Phaser.Scene {
 
   private clearWallDraft(): void {
     this.wallDraft = undefined;
+    this.wallDragStartTile = undefined;
     this.clearSelectionDrag();
     this.hideWallPlacementPreview();
   }
 
-  private finishWallDraftOrCancel(): void {
-    if (this.placementType !== "wall") {
-      this.cancelPlacement();
-      return;
-    }
-    const committedSegments = this.wallDraft ? wallSegmentsForDraftPoints(this.wallDraft.points) : [];
-    if (this.wallDraft && committedSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, committedSegments)) {
-      this.confirmWallDraft();
-      return;
-    }
-    if (this.wallDraft) {
+  private cancelWallDraftOrPlacement(): void {
+    if (this.wallDraft || this.wallDragStartTile) {
       this.clearWallDraft();
       return;
     }
     this.cancelPlacement();
+  }
+
+  private toggleWallOrientation(): void {
+    this.wallOrientationMode = this.wallOrientationMode === "auto" ? "horizontal" : this.wallOrientationMode === "horizontal" ? "vertical" : "auto";
+    this.playUiClick(460, 0.014);
   }
 
   private selectTownCenter(): void {
@@ -2003,7 +2012,7 @@ export class WorldScene extends Phaser.Scene {
     }
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
     if (this.placementType === "wall") {
-      this.handleWallPlacementClick(pointer);
+      this.finishWallDrag(pointer);
       return;
     }
     if (!canPlaceBuildingAt(this.simulation.state, this.placementType, tile)) {
@@ -2028,34 +2037,31 @@ export class WorldScene extends Phaser.Scene {
     this.dragStartScreen = undefined;
   }
 
-  private handleWallPlacementClick(pointer: Phaser.Input.Pointer): void {
+  private startWallDrag(pointer: Phaser.Input.Pointer): void {
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
-    if (!this.wallDraft) {
-      this.wallDraft = { points: [tile] };
-      this.clearSelectionDrag();
-      return;
-    }
-
-    const lastPoint = this.wallDraft.points.at(-1);
-    if (!lastPoint) {
-      this.wallDraft = { points: [tile] };
-      return;
-    }
-
-    const end = normalizeWallLineEnd(lastPoint, tile);
-    if (sameTile(end, lastPoint) && this.wallDraft.points.length > 1) {
-      return;
-    }
-    const nextPoints = [...this.wallDraft.points, end];
-    const segments = wallSegmentsForDraftPoints(nextPoints);
-    if (segments.length === 0 || !canPlaceWallSegmentsAt(this.simulation.state, segments)) {
-      this.playUiClick(210, 0.018);
-      return;
-    }
-
-    this.wallDraft.points.push(end);
+    this.wallDragStartTile = tile;
+    this.wallDraft = { points: [tile] };
     this.clearSelectionDrag();
-    this.playUiClick(520, 0.014);
+  }
+
+  private finishWallDrag(pointer: Phaser.Input.Pointer): void {
+    if (this.placementType !== "wall" || !this.wallDragStartTile) {
+      this.clearWallDraft();
+      return;
+    }
+    const start = this.wallDragStartTile;
+    const hover = worldToTile({ x: pointer.worldX, y: pointer.worldY });
+    const end = normalizeWallLineEnd(start, hover, this.wallOrientationMode);
+    if (sameTile(start, end)) {
+      this.clearWallDraft();
+      return;
+    }
+
+    const segments = wallLineSegments(start, end);
+    if (!this.confirmWallSegments(segments)) {
+      this.playUiClick(210, 0.018);
+    }
+    this.clearWallDraft();
   }
 
   private confirmWallDraft(): void {
@@ -2063,11 +2069,17 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     const segments = wallSegmentsForDraftPoints(this.wallDraft.points);
-    if (segments.length === 0 || !canPlaceWallSegmentsAt(this.simulation.state, segments)) {
+    if (!this.confirmWallSegments(segments)) {
       this.playUiClick(210, 0.018);
       return;
     }
+    this.clearWallDraft();
+  }
 
+  private confirmWallSegments(segments: WallLineSegment[]): boolean {
+    if (this.placementType !== "wall" || segments.length === 0 || !canPlaceWallSegmentsAt(this.simulation.state, segments)) {
+      return false;
+    }
     this.simulation.dispatch({
       type: "buildWallPath",
       playerId: PLAYER_ID,
@@ -2085,9 +2097,7 @@ export class WorldScene extends Phaser.Scene {
         "build",
       );
     }
-    this.wallDraft = undefined;
-    this.hideWallPlacementPreview();
-    this.clearSelectionDrag();
+    return true;
   }
 
   private updatePlacementPreview(): void {
@@ -2225,7 +2235,7 @@ export class WorldScene extends Phaser.Scene {
     if (!lastPoint) {
       return [];
     }
-    const previewEnd = normalizeWallLineEnd(lastPoint, pointerTile);
+    const previewEnd = normalizeWallLineEnd(lastPoint, pointerTile, this.wallOrientationMode);
     return sameTile(previewEnd, lastPoint) ? this.wallDraft.points : [...this.wallDraft.points, previewEnd];
   }
 
@@ -2827,7 +2837,13 @@ function resourceVisualFor(entity: GameEntity): ResourceVisual | undefined {
   };
 }
 
-function normalizeWallLineEnd(start: TileCoord, hover: TileCoord): TileCoord {
+function normalizeWallLineEnd(start: TileCoord, hover: TileCoord, mode: WallOrientationMode): TileCoord {
+  if (mode === "horizontal") {
+    return { x: hover.x, y: start.y };
+  }
+  if (mode === "vertical") {
+    return { x: start.x, y: hover.y };
+  }
   return Math.abs(hover.x - start.x) >= Math.abs(hover.y - start.y) ? { x: hover.x, y: start.y } : { x: start.x, y: hover.y };
 }
 

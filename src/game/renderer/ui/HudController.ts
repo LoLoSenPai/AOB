@@ -11,6 +11,7 @@ type HudCallbacks = {
   onCloseBuildMenu: () => void;
   onCancelPlacement: () => void;
   onClearWallDraft: () => void;
+  onToggleWallOrientation: () => void;
   onConfirmPlacement: () => void;
   onTrainRequest: (unitType: UnitType) => void;
   onAdvanceAgeRequest: () => void;
@@ -26,6 +27,7 @@ export type HudRenderContext = {
   wallLineStarted: boolean;
   wallSegmentCount: number;
   wallPlacementCanConfirm: boolean;
+  wallOrientationMode: "auto" | "horizontal" | "vertical";
   buildMenuOpen: boolean;
   camera?: {
     x: number;
@@ -237,6 +239,9 @@ export class HudController {
     this.root.querySelectorAll<HTMLButtonElement>("[data-clear-wall-draft]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onClearWallDraft());
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-toggle-wall-orientation]").forEach((button) => {
+      button.addEventListener("click", () => this.callbacks.onToggleWallOrientation());
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-confirm-placement]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onConfirmPlacement());
     });
@@ -432,15 +437,15 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
   if (context.placementType) {
     if (context.placementType === "wall") {
       const labelText = context.wallLineStarted
-        ? `${context.wallSegmentCount} wall segment${context.wallSegmentCount === 1 ? "" : "s"}`
-        : "Choose wall start";
+        ? `${context.wallSegmentCount} wall segment${context.wallSegmentCount === 1 ? "" : "s"} preview`
+        : "Drag wall line";
       return `
         <div class="command-dock">
           <div class="command-section">
             <div class="command-label">${labelText}</div>
-            <div class="hud-inline-note">Left click turns. Right click builds the current line and starts a new one.</div>
-            <button class="command-button command-wide" data-confirm-placement="true" ${context.wallPlacementCanConfirm ? "" : "disabled"}>Build Line</button>
-            <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}>New Start</button>
+            <div class="hud-inline-note">Hold left click, drag the line, release to build.</div>
+            <button class="command-button command-wide" data-toggle-wall-orientation="true">Direction: ${wallOrientationLabel(context.wallOrientationMode)}</button>
+            <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}>Clear Preview</button>
             <button class="command-button command-wide" data-cancel-placement="true">Exit Wall Mode</button>
           </div>
         </div>
@@ -518,6 +523,17 @@ function buildingLifecycleButtons(primary: GameEntity | undefined): string {
     return "";
   }
   return `<button class="command-button command-button--danger" data-destroy-building="${primary.id}"><span class="command-title">Destroy</span><span class="command-subtitle">Delete</span></button>`;
+}
+
+function wallOrientationLabel(mode: HudRenderContext["wallOrientationMode"]): string {
+  switch (mode) {
+    case "horizontal":
+      return "Horizontal";
+    case "vertical":
+      return "Vertical";
+    case "auto":
+      return "Auto";
+  }
 }
 
 function buildMenuMarkup(state: GameState): string {
