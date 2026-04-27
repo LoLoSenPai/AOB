@@ -39,6 +39,15 @@ export type ResourceVisualDef = {
   depleted?: SpriteVisualDef;
 };
 
+export type BuildingRuinVisualDef = {
+  key: string;
+  maxSize: number;
+  originX: number;
+  originY: number;
+  y: number;
+  alpha: number;
+};
+
 export type VisualOverlayKind = "villageGround" | "pathDecal" | "grassDetail" | "villageProp";
 
 export type ImageDecalKey =
@@ -240,6 +249,13 @@ export const buildingVisuals: Partial<Record<BuildingType, BuildingVisualDef>> =
     groundOffsetY: -8,
     fallbackSize: 88,
   },
+  stable: {
+    maxSize: 220,
+    constructionScale: 0.72,
+    groundPadding: { x: 20, y: 18 },
+    groundOffsetY: -8,
+    fallbackSize: 84,
+  },
   watchTower: {
     maxSize: 235,
     constructionScale: 0.72,
@@ -415,6 +431,8 @@ export function buildingStaticAssetKeyForType(type: BuildingType, completed: boo
       return completed ? assetKeys.aobBuildingStatic.farm[ownerAge] : assetKeys.aobBuildingStatic.construction;
     case "barracks":
       return completed ? assetKeys.aobBuildingStatic.barracks[ownerAge] : assetKeys.aobBuildingStatic.construction;
+    case "stable":
+      return completed ? assetKeys.aobBuildingStatic.stable[ownerAge] : assetKeys.aobBuildingStatic.construction;
     case "watchTower":
       return completed ? assetKeys.aobBuildingStatic.watchTower[ownerAge] : assetKeys.aobBuildingStatic.construction;
     default:
@@ -425,6 +443,47 @@ export function buildingStaticAssetKeyForType(type: BuildingType, completed: boo
 export function buildingStaticVisualSizeForType(type: BuildingType, age?: AgeId): number {
   const visual = buildingVisuals[type];
   return (age ? visual?.maxSizeByAge?.[age] : undefined) ?? visual?.maxSize ?? 48;
+}
+
+export function buildingRuinVisualForType(type: BuildingType): BuildingRuinVisualDef | undefined {
+  switch (type) {
+    case "house":
+    case "lumberCamp":
+    case "stoneCamp":
+    case "goldCamp":
+    case "watchTower":
+      return {
+        key: assetKeys.aobBuildingRuins.small,
+        maxSize: 190,
+        originX: 0.5,
+        originY: 1,
+        y: 0,
+        alpha: 0.96,
+      };
+    case "farm":
+    case "mill":
+    case "barracks":
+    case "stable":
+      return {
+        key: assetKeys.aobBuildingRuins.medium,
+        maxSize: 245,
+        originX: 0.5,
+        originY: 1,
+        y: 0,
+        alpha: 0.96,
+      };
+    case "townCenter":
+      return {
+        key: assetKeys.aobBuildingRuins.large,
+        maxSize: 320,
+        originX: 0.5,
+        originY: 1,
+        y: 0,
+        alpha: 0.98,
+      };
+    default:
+      return undefined;
+  }
 }
 
 export function constructionVisualSizeForType(type: BuildingType): number {

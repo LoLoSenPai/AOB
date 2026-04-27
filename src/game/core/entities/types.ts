@@ -3,11 +3,12 @@ import type { TileCoord, Vec2 } from "../state/types";
 
 export type EntityId = string;
 export type EntityKind = "unit" | "building" | "resource";
-export type UnitType = "worker" | "soldier" | "archer" | "goblin" | "skeleton";
+export type UnitType = "worker" | "soldier" | "archer" | "scout" | "goblin" | "skeleton";
 export type BuildingType =
   | "townCenter"
   | "house"
   | "barracks"
+  | "stable"
   | "lumberCamp"
   | "mill"
   | "stoneCamp"
@@ -45,6 +46,11 @@ export type WorkerTask =
     }
   | {
       kind: "build";
+      buildingId: EntityId;
+      approachTile?: TileCoord;
+    }
+  | {
+      kind: "repair";
       buildingId: EntityId;
       approachTile?: TileCoord;
     };

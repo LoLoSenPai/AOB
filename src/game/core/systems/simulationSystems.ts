@@ -4,7 +4,7 @@ import type { EntityId, GameEntity } from "../entities/types";
 import { completedObjectiveIdsInOrder, objectiveTitle } from "../selectors/objectives";
 import { createUnit } from "../state/entityFactory";
 import { addMessage } from "../state/createInitialState";
-import type { CombatEvent, GameState, TileCoord } from "../state/types";
+import type { BuildingEvent, CombatEvent, GameState, TileCoord } from "../state/types";
 import {
   distance,
   findFreeAdjacentTiles,
@@ -16,20 +16,27 @@ import {
   worldToTile,
 } from "./mapQueries";
 import { findPath } from "./pathfinding";
+import { revealPlayerVision } from "./visibility";
 import { wallLineSegments, type WallLineSegment } from "./wallPlacement";
 
 export function runSimulationSystems(state: GameState): void {
   runAiSystem(state);
   runMovementSystem(state);
+  runVisibilitySystem(state);
   runGatheringSystem(state);
   runResourceRegrowthSystem(state);
   runConstructionSystem(state);
+  runRepairSystem(state);
   runProductionSystem(state);
   runCombatSystem(state);
   runProgressionSystem(state);
   runObjectiveSystem(state);
   runCleanupSystem(state);
   trimCombatEvents(state);
+}
+
+function runVisibilitySystem(state: GameState): void {
+  revealPlayerVision(state);
 }
 
 function runMovementSystem(state: GameState): void {
@@ -321,6 +328,76 @@ function runConstructionSystem(state: GameState): void {
   }
 }
 
+function runRepairSystem(state: GameState): void {
+  const repairersByBuilding = new Map<EntityId, GameEntity[]>();
+
+  for (const worker of Object.values(state.entities)) {
+    const workerComponent = worker.worker;
+    const task = workerComponent?.task;
+    if (!workerComponent || !task || task.kind !== "repair" || worker.ownerId !== PLAYER_ID) {
+      continue;
+    }
+
+    const building = state.entities[task.buildingId];
+    if (!building?.building || !building.health || !building.building.completed) {
+      delete workerComponent.task;
+      worker.visualState = "idle";
+      continue;
+    }
+    if (building.health.current >= building.health.max) {
+      delete workerComponent.task;
+      worker.visualState = "idle";
+      continue;
+    }
+
+    if (!isWorkerInConstructionRange(worker, building, task.approachTile)) {
+      if (worker.mobile && (!worker.mobile.target || worker.mobile.path.length === 0)) {
+        const approachTile =
+          task.approachTile && isReachableConstructionTile(state, worker.position, task.approachTile)
+            ? task.approachTile
+            : findReachableConstructionTile(state, building, worker.position);
+        if (!approachTile) {
+          delete workerComponent.task;
+          worker.visualState = "idle";
+          continue;
+        }
+        task.approachTile = approachTile;
+        worker.mobile.target = tileCenter(approachTile);
+        worker.mobile.path = pathToReachableTile(state, worker.position, approachTile) ?? [];
+      }
+      continue;
+    }
+
+    worker.visualState = "building";
+    const list = repairersByBuilding.get(building.id) ?? [];
+    list.push(worker);
+    repairersByBuilding.set(building.id, list);
+  }
+
+  for (const [buildingId, repairers] of repairersByBuilding) {
+    const building = state.entities[buildingId];
+    if (!building?.health) {
+      continue;
+    }
+    const repairPower = repairers.reduce((sum, worker) => sum + (worker.worker?.buildPower ?? 0), 0);
+    building.health.current = Math.min(building.health.max, building.health.current + repairPower * 1.4);
+    if (building.health.current >= building.health.max) {
+      building.health.current = building.health.max;
+      for (const worker of repairers) {
+        if (worker.worker?.task?.kind === "repair" && worker.worker.task.buildingId === building.id) {
+          delete worker.worker.task;
+          if (worker.mobile) {
+            delete worker.mobile.target;
+            worker.mobile.path = [];
+          }
+          worker.visualState = "idle";
+        }
+      }
+      addMessage(state, `${building.label} repaired.`);
+    }
+  }
+}
+
 function isWorkerInConstructionRange(worker: GameEntity, building: GameEntity, approachTile: TileCoord | undefined): boolean {
   if (approachTile && distance(worker.position, tileCenter(approachTile)) <= TILE_SIZE * 0.55) {
     return true;
@@ -576,12 +653,36 @@ function runCleanupSystem(state: GameState): void {
     if (!entity.health || entity.health.current > 0) {
       continue;
     }
+    if (entity.building) {
+      addBuildingDestroyedEvent(state, entity);
+      const config = buildingConfigs[entity.building.type];
+      if (entity.ownerId === PLAYER_ID && config.providesPopulation) {
+        state.players[PLAYER_ID].populationCap = Math.max(0, state.players[PLAYER_ID].populationCap - config.providesPopulation);
+      }
+    }
     delete state.entities[id];
     state.selection.selectedIds = state.selection.selectedIds.filter((selectedId) => selectedId !== id);
     if (entity.ownerId === PLAYER_ID && entity.unit) {
       state.players[PLAYER_ID].population = Math.max(0, state.players[PLAYER_ID].population - unitConfigs[entity.unit.type].population);
     }
   }
+}
+
+function addBuildingDestroyedEvent(state: GameState, entity: GameEntity): void {
+  if (!entity.building) {
+    return;
+  }
+  const event: BuildingEvent = {
+    id: state.tick * 1000 + state.buildingEvents.length,
+    tick: state.tick,
+    kind: "destroyed",
+    buildingId: entity.id,
+    buildingType: entity.building.type,
+    position: { ...entity.position },
+    footprint: { ...entity.building.footprint },
+  };
+  state.buildingEvents.push(event);
+  state.buildingEvents = state.buildingEvents.slice(-40);
 }
 
 function completeBuilding(state: GameState, building: GameEntity): void {

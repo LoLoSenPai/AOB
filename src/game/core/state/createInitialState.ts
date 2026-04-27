@@ -2,6 +2,7 @@ import { ENEMY_ID, PLAYER_ID, TILE_SIZE } from "../../data/constants";
 import { createEmptyStock } from "../../data/definitions";
 import { initialMapLayout, type TerrainStamp } from "../../data/mapLayout";
 import { setMapTile, stampBuildingGround } from "../systems/mapEditing";
+import { createVisibilityState, revealPlayerVision } from "../systems/visibility";
 import type { GameState, MapState, TileCoord, TileType } from "./types";
 import { createBuilding, createResourceNode, createUnit } from "./entityFactory";
 
@@ -12,6 +13,7 @@ export function createInitialState(): GameState {
     nextMessageNumber: 1,
     rngSeed: 1337,
     map: createMap(),
+    visibility: createVisibilityState(initialMapLayout.width, initialMapLayout.height),
     players: {
       [PLAYER_ID]: {
         id: PLAYER_ID,
@@ -43,6 +45,7 @@ export function createInitialState(): GameState {
     },
     messages: [],
     combatEvents: [],
+    buildingEvents: [],
     objectives: {
       completedIds: [],
     },
@@ -50,6 +53,7 @@ export function createInitialState(): GameState {
 
   seedVillage(state);
   seedResources(state);
+  revealPlayerVision(state);
   return state;
 }
 

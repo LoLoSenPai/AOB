@@ -15,18 +15,20 @@ export function wallLineSegments(start: TileCoord, end: TileCoord): WallLineSegm
   const horizontal = Math.abs(end.x - start.x) >= Math.abs(end.y - start.y);
   const delta = horizontal ? end.x - start.x : end.y - start.y;
   const direction = delta < 0 ? -1 : 1;
-  const segmentCount = Math.floor(Math.abs(delta) / WALL_SEGMENT_TILE_SPAN) + 1;
+  const tileCount = Math.abs(delta) + 1;
+  const segmentCount = Math.ceil(tileCount / WALL_SEGMENT_TILE_SPAN);
   const segments: WallLineSegment[] = [];
 
   for (let index = 0; index < segmentCount; index += 1) {
     const offset = index * WALL_SEGMENT_TILE_SPAN;
+    const length = Math.min(WALL_SEGMENT_TILE_SPAN, tileCount - offset);
     const value =
       direction > 0
         ? (horizontal ? start.x : start.y) + offset
-        : (horizontal ? start.x : start.y) - offset - WALL_SEGMENT_TILE_SPAN + 1;
+        : (horizontal ? start.x : start.y) - offset - length + 1;
     segments.push({
       tile: horizontal ? { x: value, y: start.y } : { x: start.x, y: value },
-      footprint: horizontal ? { w: WALL_SEGMENT_TILE_SPAN, h: 1 } : { w: 1, h: WALL_SEGMENT_TILE_SPAN },
+      footprint: horizontal ? { w: length, h: 1 } : { w: 1, h: length },
       direction: horizontal ? "horizontal" : "vertical",
     });
   }

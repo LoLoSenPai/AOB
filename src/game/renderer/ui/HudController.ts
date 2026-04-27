@@ -10,10 +10,13 @@ type HudCallbacks = {
   onOpenBuildMenu: () => void;
   onCloseBuildMenu: () => void;
   onCancelPlacement: () => void;
+  onClearWallDraft: () => void;
   onConfirmPlacement: () => void;
   onTrainRequest: (unitType: UnitType) => void;
   onAdvanceAgeRequest: () => void;
   onReseedFarmRequest: (farmId: string) => void;
+  onCancelConstruction: (buildingId: string) => void;
+  onDestroyBuilding: (buildingId: string) => void;
   onSelectIdleWorker: () => void;
   onSelectTownCenter: () => void;
 };
@@ -34,9 +37,11 @@ export type HudRenderContext = {
 
 const BUILD_GROUPS: { label: string; buildings: BuildingType[] }[] = [
   { label: "Economy", buildings: ["house", "farm", "mill", "lumberCamp", "stoneCamp", "goldCamp"] },
-  { label: "Military", buildings: ["barracks"] },
+  { label: "Military", buildings: ["barracks", "stable"] },
   { label: "Defense", buildings: ["watchTower", "wall"] },
 ];
+
+const MAX_VISIBLE_OBJECTIVES = 5;
 
 const RESOURCE_ICON_PATHS: Record<ResourceType, string> = {
   food: "/assets/sunnyside/elements/wheat_05.png",
@@ -52,6 +57,7 @@ const UNIT_PORTRAIT_PATHS: Partial<Record<UnitType, string>> = {
   worker: "/assets/ui/portraits/villager.png",
   soldier: "/assets/ui/portraits/knight.png",
   archer: "/assets/ui/portraits/archer.png",
+  scout: "/assets/ui/portraits/scout.png",
 };
 
 const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> = {
@@ -91,6 +97,11 @@ const BUILDING_ICON_PATHS: Partial<Record<BuildingType, Record<AgeId, string>>> 
     network: "/assets/aob-buildings/static-runtime/gold-camp-t3.png",
   },
   barracks: {
+    genesis: "/assets/aob-buildings/static-runtime/barracks-t1.png",
+    settlement: "/assets/aob-buildings/static-runtime/barracks-t2.png",
+    network: "/assets/aob-buildings/static-runtime/barracks-t3.png",
+  },
+  stable: {
     genesis: "/assets/aob-buildings/static-runtime/barracks-t1.png",
     settlement: "/assets/aob-buildings/static-runtime/barracks-t2.png",
     network: "/assets/aob-buildings/static-runtime/barracks-t3.png",
@@ -204,8 +215,27 @@ export class HudController {
         }
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-cancel-construction]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const buildingId = button.dataset.cancelConstruction;
+        if (buildingId) {
+          this.callbacks.onCancelConstruction(buildingId);
+        }
+      });
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-destroy-building]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const buildingId = button.dataset.destroyBuilding;
+        if (buildingId) {
+          this.callbacks.onDestroyBuilding(buildingId);
+        }
+      });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-cancel-placement]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onCancelPlacement());
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-clear-wall-draft]").forEach((button) => {
+      button.addEventListener("click", () => this.callbacks.onClearWallDraft());
     });
     this.root.querySelectorAll<HTMLButtonElement>("[data-confirm-placement]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onConfirmPlacement());
@@ -235,18 +265,19 @@ function workerSummaryMarkup(workerTasks: ReturnType<typeof workerTaskCountsForP
       <span><strong>${workerTasks.total}</strong> villagers</span>
       <span>Gather ${workerTasks.gathering}</span>
       <span>Build ${workerTasks.building}</span>
+      <span>Repair ${workerTasks.repairing}</span>
       <span>Carry ${workerTasks.carrying}</span>
     </div>
   `;
 }
 
 function objectivesMarkup(state: GameState): string {
-  const objectives = objectiveViewsForState(state);
+  const { hiddenAfter, hiddenBefore, visibleObjectives } = visibleObjectivesForPanel(state);
   return `
     <div class="objective-panel">
       <div class="objective-title">Objectives</div>
       <div class="objective-list">
-        ${objectives
+        ${visibleObjectives
           .map(
             (objective) => `
               <div class="objective-row objective-row--${objective.status}">
@@ -260,9 +291,45 @@ function objectivesMarkup(state: GameState): string {
             `,
           )
           .join("")}
+        ${objectiveMoreMarkup(hiddenBefore, hiddenAfter)}
       </div>
     </div>
   `;
+}
+
+function visibleObjectivesForPanel(state: GameState): {
+  hiddenAfter: number;
+  hiddenBefore: number;
+  visibleObjectives: ReturnType<typeof objectiveViewsForState>;
+} {
+  const objectives = objectiveViewsForState(state);
+  if (objectives.length <= MAX_VISIBLE_OBJECTIVES) {
+    return { hiddenAfter: 0, hiddenBefore: 0, visibleObjectives: objectives };
+  }
+
+  const activeIndex = Math.max(
+    0,
+    objectives.findIndex((objective) => objective.status === "active"),
+  );
+  const maxStart = Math.max(0, objectives.length - MAX_VISIBLE_OBJECTIVES);
+  const start = Math.min(maxStart, Math.max(0, activeIndex - 2));
+  const visibleObjectives = objectives.slice(start, start + MAX_VISIBLE_OBJECTIVES);
+  return {
+    hiddenAfter: Math.max(0, objectives.length - start - visibleObjectives.length),
+    hiddenBefore: start,
+    visibleObjectives,
+  };
+}
+
+function objectiveMoreMarkup(hiddenBefore: number, hiddenAfter: number): string {
+  if (hiddenBefore === 0 && hiddenAfter === 0) {
+    return "";
+  }
+  const parts = [
+    hiddenBefore > 0 ? `${hiddenBefore} earlier` : "",
+    hiddenAfter > 0 ? `${hiddenAfter} later` : "",
+  ].filter(Boolean);
+  return `<div class="objective-more">${parts.join(" / ")}</div>`;
 }
 
 function panelMarkup(primary: GameEntity | undefined, selected: GameEntity[], state: GameState): string {
@@ -371,8 +438,10 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
         <div class="command-dock">
           <div class="command-section">
             <div class="command-label">${labelText}</div>
-            <button class="command-button command-wide" data-confirm-placement="true" ${context.wallPlacementCanConfirm ? "" : "disabled"}>Build Wall</button>
-            <button class="command-button command-wide" data-cancel-placement="true">Cancel</button>
+            <div class="hud-inline-note">Left click turns. Right click builds the current line and starts a new one.</div>
+            <button class="command-button command-wide" data-confirm-placement="true" ${context.wallPlacementCanConfirm ? "" : "disabled"}>Build Line</button>
+            <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}>New Start</button>
+            <button class="command-button command-wide" data-cancel-placement="true">Exit Wall Mode</button>
           </div>
         </div>
       `;
@@ -418,9 +487,10 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
       ? `<button class="command-button" data-reseed="${primary.id}">Reseed<br>${costLabel(primary.farm.reseedCost)}</button>`
       : "";
   const workerCommands = hasWorker ? `<div class="command-label">Villager</div><div class="command-grid"><button class="command-button" data-open-build="true">Build</button></div>` : "";
+  const lifecycleButtons = buildingLifecycleButtons(primary);
   const buildingCommands =
-    trainButtons || ageButton || reseedButton
-      ? `${trainButtons ? `<div class="command-label">Produce</div><div class="command-grid">${trainButtons}${ageButton}</div>` : ""}${!trainButtons && ageButton ? `<div class="command-label">Town Center</div><div class="command-grid">${ageButton}</div>` : ""}${reseedButton ? `<div class="command-label">Farm</div><div class="command-grid">${reseedButton}</div>` : ""}`
+    trainButtons || ageButton || reseedButton || lifecycleButtons
+      ? `${trainButtons ? `<div class="command-label">Produce</div><div class="command-grid">${trainButtons}${ageButton}</div>` : ""}${!trainButtons && ageButton ? `<div class="command-label">Town Center</div><div class="command-grid">${ageButton}</div>` : ""}${reseedButton ? `<div class="command-label">Farm</div><div class="command-grid">${reseedButton}</div>` : ""}${lifecycleButtons ? `<div class="command-label">Structure</div><div class="command-grid">${lifecycleButtons}</div>` : ""}`
       : "";
 
   if (!workerCommands && !buildingCommands) {
@@ -435,6 +505,19 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
       </div>
     </div>
   `;
+}
+
+function buildingLifecycleButtons(primary: GameEntity | undefined): string {
+  if (!primary?.building || primary.ownerId !== PLAYER_ID) {
+    return "";
+  }
+  if (!primary.building.completed) {
+    return `<button class="command-button command-button--danger" data-cancel-construction="${primary.id}"><span class="command-title">Cancel</span><span class="command-subtitle">Refund</span></button>`;
+  }
+  if (primary.building.type === "townCenter") {
+    return "";
+  }
+  return `<button class="command-button command-button--danger" data-destroy-building="${primary.id}"><span class="command-title">Destroy</span><span class="command-subtitle">Delete</span></button>`;
 }
 
 function buildMenuMarkup(state: GameState): string {
@@ -523,6 +606,9 @@ function minimapMarkup(state: GameState, context: HudRenderContext): string {
 }
 
 function minimapDot(entity: GameEntity, state: GameState): string {
+  if (entity.ownerId !== PLAYER_ID && !isEntityExplored(state, entity)) {
+    return "";
+  }
   const left = percent(entity.position.x, state.map.width * state.map.tileSize);
   const top = percent(entity.position.y, state.map.height * state.map.tileSize);
   let className = "minimap-dot";
@@ -538,6 +624,15 @@ function minimapDot(entity: GameEntity, state: GameState): string {
     className += " minimap-dot--neutral";
   }
   return `<span class="${className}" style="left:${left}%;top:${top}%;"></span>`;
+}
+
+function isEntityExplored(state: GameState, entity: GameEntity): boolean {
+  const x = Math.floor(entity.position.x / state.map.tileSize);
+  const y = Math.floor(entity.position.y / state.map.tileSize);
+  if (x < 0 || y < 0 || x >= state.map.width || y >= state.map.height) {
+    return false;
+  }
+  return Boolean(state.visibility.exploredTiles[y * state.map.width + x]);
 }
 
 function percent(value: number, total: number): number {
@@ -625,9 +720,10 @@ function detailsFor(primary: GameEntity, selected: GameEntity[], state: GameStat
     const workers = selected.filter((entity) => entity.worker).length;
     const fighters = selected.filter((entity) => entity.combat).length;
     const building = selected.filter((entity) => entity.worker?.task?.kind === "build").length;
+    const repairing = selected.filter((entity) => entity.worker?.task?.kind === "repair").length;
     const gathering = selected.filter((entity) => entity.worker?.task?.kind === "gather").length;
     const idle = selected.filter((entity) => entity.worker && !entity.worker.task && !entity.worker.carrying && !entity.mobile?.target && (entity.mobile?.path.length ?? 0) === 0).length;
-    return `<span><strong>Villagers:</strong> ${workers}</span><span><strong>Infantry:</strong> ${fighters}</span><span><strong>Idle:</strong> ${idle}</span><span><strong>Gathering:</strong> ${gathering}</span><span><strong>Building:</strong> ${building}</span>`;
+    return `<span><strong>Villagers:</strong> ${workers}</span><span><strong>Infantry:</strong> ${fighters}</span><span><strong>Idle:</strong> ${idle}</span><span><strong>Gathering:</strong> ${gathering}</span><span><strong>Building:</strong> ${building}</span><span><strong>Repairing:</strong> ${repairing}</span>`;
   }
 
   const health = primary.health ? `<span><strong>Health:</strong> ${Math.max(0, Math.ceil(primary.health.current))}/${primary.health.max}</span>` : "";
@@ -651,7 +747,7 @@ function selectionHelp(primary: GameEntity | undefined, state: GameState): strin
     return "<span>Select villagers with click or drag rectangle.</span><span>Right click resources, farms, or terrain.</span>";
   }
   if (primary.worker) {
-    return "<span>Villagers gather, build, and deposit at the nearest valid camp.</span>";
+    return "<span>Villagers gather, build, repair damaged allied buildings, and deposit at the nearest valid camp.</span>";
   }
   if (primary.building && buildingConfigs[primary.building.type].providesPopulation) {
     return `<span>This building increases max population by ${buildingConfigs[primary.building.type].providesPopulation} when completed.</span>`;
@@ -669,7 +765,7 @@ function selectionHelp(primary: GameEntity | undefined, state: GameState): strin
   if (primary.building?.completed) {
     return primary.producer
       ? "<span>Use the command dock for production.</span><span>Right click terrain to set a rally point.</span>"
-      : "<span>Use the command dock for production, age-up, or village expansion.</span>";
+      : "<span>Right click with villagers selected to repair this building if damaged.</span>";
   }
   if (primary.resourceNode) {
     return "<span>Right click with villagers selected to gather this resource.</span>";

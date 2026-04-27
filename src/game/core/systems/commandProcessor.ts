@@ -46,6 +46,9 @@ export function applyCommand(state: GameState, command: GameCommand): void {
     case "assignBuilders":
       applyAssignBuilders(state, command.playerId, command.buildingId, command.builderIds);
       break;
+    case "repairBuilding":
+      applyRepairBuilding(state, command.playerId, command.buildingId, command.builderIds);
+      break;
     case "trainUnit":
       applyTrainUnit(state, command.playerId, command.buildingId, command.unitType);
       break;
@@ -57,6 +60,12 @@ export function applyCommand(state: GameState, command: GameCommand): void {
       break;
     case "reseedFarm":
       applyReseedFarm(state, command.playerId, command.farmId);
+      break;
+    case "cancelConstruction":
+      applyCancelConstruction(state, command.playerId, command.buildingId);
+      break;
+    case "destroyBuilding":
+      applyDestroyBuilding(state, command.playerId, command.buildingId);
       break;
     case "queueResearch":
     case "cancelPlacement":
@@ -196,6 +205,29 @@ function applyAssignBuilders(state: GameState, playerId: PlayerId, buildingId: E
   }
 }
 
+function applyRepairBuilding(state: GameState, playerId: PlayerId, buildingId: EntityId, builderIds: EntityId[]): void {
+  const building = state.entities[buildingId];
+  if (!building?.building || !building.health || !building.building.completed || building.ownerId !== playerId) {
+    return;
+  }
+  if (building.health.current >= building.health.max) {
+    addMessage(state, "Building is already fully repaired.");
+    return;
+  }
+
+  const reservedTiles = new Set<string>();
+  let assignedCount = 0;
+  for (const id of builderIds) {
+    const builder = state.entities[id];
+    if (builder && assignWorkerToRepair(state, playerId, builder, building, reservedTiles)) {
+      assignedCount += 1;
+    }
+  }
+  if (assignedCount > 0) {
+    addMessage(state, `${assignedCount} villager${assignedCount > 1 ? "s" : ""} assigned to repair.`);
+  }
+}
+
 function assignBuildersToConstruction(state: GameState, playerId: PlayerId, building: GameEntity, builderIds: EntityId[]): number {
   const reservedTiles = new Set<string>();
   let assignedCount = 0;
@@ -208,6 +240,39 @@ function assignBuildersToConstruction(state: GameState, playerId: PlayerId, buil
   }
 
   return assignedCount;
+}
+
+function assignWorkerToRepair(
+  state: GameState,
+  playerId: PlayerId,
+  builder: GameEntity,
+  building: GameEntity,
+  reservedTiles: Set<string>,
+): boolean {
+  if (!builder.worker || !builder.mobile || builder.ownerId !== playerId || !building.building || !building.health) {
+    return false;
+  }
+
+  const approachTile = findAvailableConstructionTile(state, building, builder.position, reservedTiles);
+  if (!approachTile) {
+    return false;
+  }
+
+  const path = pathToReachableTile(state, builder.position, approachTile);
+  if (!path) {
+    return false;
+  }
+
+  builder.worker.task = {
+    kind: "repair",
+    buildingId: building.id,
+    approachTile,
+  };
+  delete builder.worker.carrying;
+  builder.mobile.target = tileCenter(approachTile);
+  builder.mobile.path = path;
+  builder.visualState = "walking";
+  return true;
 }
 
 function applyBuildWallLine(state: GameState, playerId: PlayerId, start: TileCoord, end: TileCoord, builderIds: EntityId[]): void {
@@ -399,12 +464,96 @@ function applyReseedFarm(state: GameState, playerId: PlayerId, farmId: EntityId)
   addMessage(state, "Farm reseeded.");
 }
 
+function applyCancelConstruction(state: GameState, playerId: PlayerId, buildingId: EntityId): void {
+  const player = state.players[playerId];
+  const building = state.entities[buildingId];
+  if (!player || !building?.building || building.ownerId !== playerId) {
+    return;
+  }
+  if (building.building.completed) {
+    addMessage(state, "Building is already completed.");
+    return;
+  }
+
+  const progress = Math.max(0, Math.min(1, building.building.buildProgress / Math.max(1, building.building.buildTimeTicks)));
+  const refund = scaleCost(costForBuilding(building.building.type, player.age), 1 - progress);
+  player.resources = applyCost(player.resources, refund, 1);
+  releaseBuildersFromBuilding(state, building.id);
+  delete state.entities[building.id];
+  state.selection.selectedIds = state.selection.selectedIds.filter((id) => id !== building.id);
+  addMessage(state, `${labelForBuilding(building.building.type, player.age)} cancelled.`);
+}
+
+function applyDestroyBuilding(state: GameState, playerId: PlayerId, buildingId: EntityId): void {
+  const player = state.players[playerId];
+  const building = state.entities[buildingId];
+  if (!player || !building?.building || building.ownerId !== playerId) {
+    return;
+  }
+  if (!building.building.completed) {
+    applyCancelConstruction(state, playerId, buildingId);
+    return;
+  }
+
+  const config = buildingConfigs[building.building.type];
+  if (config.providesPopulation) {
+    player.populationCap = Math.max(0, player.populationCap - config.providesPopulation);
+  }
+  pushBuildingDestroyedEvent(state, building);
+  releaseBuildersFromBuilding(state, building.id);
+  delete state.entities[building.id];
+  state.selection.selectedIds = state.selection.selectedIds.filter((id) => id !== building.id);
+  addMessage(state, `${labelForBuilding(building.building.type, player.age)} destroyed.`);
+}
+
+function pushBuildingDestroyedEvent(state: GameState, building: GameEntity): void {
+  if (!building.building) {
+    return;
+  }
+
+  state.buildingEvents.push({
+    id: state.tick * 1000 + state.buildingEvents.length,
+    tick: state.tick,
+    kind: "destroyed",
+    buildingId: building.id,
+    buildingType: building.building.type,
+    position: { ...building.position },
+    footprint: { ...building.building.footprint },
+  });
+  state.buildingEvents = state.buildingEvents.slice(-40);
+}
+
+function releaseBuildersFromBuilding(state: GameState, buildingId: EntityId): void {
+  for (const entity of Object.values(state.entities)) {
+    const worker = entity.worker;
+    const task = worker?.task;
+    if (!task || (task.kind !== "build" && task.kind !== "repair") || task.buildingId !== buildingId) {
+      continue;
+    }
+    delete worker.task;
+    if (entity.mobile) {
+      delete entity.mobile.target;
+      entity.mobile.path = [];
+    }
+    entity.visualState = "idle";
+  }
+}
+
 function multiplyCost(cost: Partial<Record<ResourceType, number>>, multiplier: number): Partial<Record<ResourceType, number>> {
   return {
     food: cost.food ? cost.food * multiplier : undefined,
     wood: cost.wood ? cost.wood * multiplier : undefined,
     stone: cost.stone ? cost.stone * multiplier : undefined,
     gold: cost.gold ? cost.gold * multiplier : undefined,
+  };
+}
+
+function scaleCost(cost: Partial<Record<ResourceType, number>>, multiplier: number): Partial<Record<ResourceType, number>> {
+  return {
+    food: cost.food ? Math.floor(cost.food * multiplier) : undefined,
+    wood: cost.wood ? Math.floor(cost.wood * multiplier) : undefined,
+    stone: cost.stone ? Math.floor(cost.stone * multiplier) : undefined,
+    gold: cost.gold ? Math.floor(cost.gold * multiplier) : undefined,
   };
 }
 

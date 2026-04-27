@@ -49,6 +49,7 @@ canvas {
   right: 0;
   height: 42px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 4px 12px;
@@ -317,6 +318,14 @@ canvas {
   color: #ffe0a0;
   font-size: 11px;
   font-weight: 700;
+}
+
+.objective-more {
+  padding: 4px 7px 0;
+  color: rgba(215, 191, 134, 0.82);
+  font-size: 11px;
+  line-height: 1.1;
+  text-align: right;
 }
 
 .hud-bottom-panel {
@@ -754,6 +763,13 @@ canvas {
   filter: grayscale(0.2) brightness(0.78);
 }
 
+.command-button--danger {
+  border-color: rgba(216, 106, 84, 0.86);
+  background:
+    linear-gradient(180deg, rgba(98, 55, 38, 0.98), rgba(37, 24, 22, 0.98)),
+    radial-gradient(circle at 50% 0%, rgba(216, 106, 84, 0.16), transparent 55%);
+}
+
 .message-log {
   position: absolute;
   left: 14px;
@@ -968,6 +984,14 @@ canvas {
 
   .objective-row {
     min-height: 32px;
+  }
+
+  .objective-row:nth-child(n + 3) {
+    display: none;
+  }
+
+  .objective-more {
+    display: none;
   }
 
   .hud-panel-extra {

@@ -2,7 +2,15 @@ import { PLAYER_ID } from "../../data/constants";
 import type { BuildingType, UnitType } from "../entities/types";
 import type { GameState } from "../state/types";
 
-export type ObjectiveId = "villagers8" | "economyBuilding" | "settlementAge" | "barracks" | "soldiers3";
+export type ObjectiveId =
+  | "villagers8"
+  | "economyBuilding"
+  | "settlementAge"
+  | "barracks"
+  | "soldiers3"
+  | "stable"
+  | "scout"
+  | "exploreMap";
 export type ObjectiveStatus = "todo" | "active" | "done";
 
 export type ObjectiveView = {
@@ -23,6 +31,7 @@ type ObjectiveDefinition = {
 };
 
 const ECONOMY_BUILDINGS = new Set<BuildingType>(["farm", "mill", "lumberCamp", "stoneCamp", "goldCamp"]);
+const EXPLORE_TARGET_RATIO = 0.18;
 
 export const OBJECTIVE_DEFINITIONS: ObjectiveDefinition[] = [
   {
@@ -59,6 +68,27 @@ export const OBJECTIVE_DEFINITIONS: ObjectiveDefinition[] = [
     detail: "Train your first three soldiers.",
     target: 3,
     progress: (state) => playerUnitCount(state, "soldier"),
+  },
+  {
+    id: "stable",
+    title: "Stable",
+    detail: "Complete a Stable after your first infantry.",
+    target: 1,
+    progress: (state) => completedPlayerBuildings(state, new Set<BuildingType>(["stable"])),
+  },
+  {
+    id: "scout",
+    title: "Lancer Scout",
+    detail: "Train a fast scout at the Stable.",
+    target: 1,
+    progress: (state) => playerUnitCount(state, "scout"),
+  },
+  {
+    id: "exploreMap",
+    title: "Explore",
+    detail: "Reveal 18% of the map with units and buildings.",
+    target: Math.round(EXPLORE_TARGET_RATIO * 100),
+    progress: (state) => Math.floor(exploredRatio(state) * 100),
   },
 ];
 
@@ -103,4 +133,13 @@ function playerUnitCount(state: GameState, type: UnitType): number {
 
 function completedPlayerBuildings(state: GameState, types: Set<BuildingType>): number {
   return Object.values(state.entities).filter((entity) => entity.ownerId === PLAYER_ID && entity.building?.completed && types.has(entity.building.type)).length;
+}
+
+function exploredRatio(state: GameState): number {
+  const total = state.map.width * state.map.height;
+  if (total <= 0) {
+    return 0;
+  }
+  const explored = state.visibility.exploredTiles.reduce((sum, tile) => sum + (tile ? 1 : 0), 0);
+  return explored / total;
 }

@@ -1,5 +1,5 @@
 import type { AgeId, PlayerId, ResourceType } from "../../data/constants";
-import type { GameEntity, EntityId, UnitType } from "../entities/types";
+import type { BuildingType, Footprint, GameEntity, EntityId, UnitType } from "../entities/types";
 
 export type Vec2 = {
   x: number;
@@ -20,6 +20,10 @@ export type MapState = {
   height: number;
   tileSize: number;
   tiles: TileType[];
+};
+
+export type VisibilityState = {
+  exploredTiles: boolean[];
 };
 
 export type AgeProgress = {
@@ -61,6 +65,16 @@ export type CombatEvent = {
   damage: number;
 };
 
+export type BuildingEvent = {
+  id: number;
+  tick: number;
+  kind: "destroyed";
+  buildingId: EntityId;
+  buildingType: BuildingType;
+  position: Vec2;
+  footprint: Footprint;
+};
+
 export type ObjectiveProgressState = {
   completedIds: string[];
 };
@@ -71,11 +85,13 @@ export type GameState = {
   nextMessageNumber: number;
   rngSeed: number;
   map: MapState;
+  visibility: VisibilityState;
   players: Record<PlayerId, PlayerState>;
   entities: Record<EntityId, GameEntity>;
   selection: SelectionState;
   messages: GameMessage[];
   combatEvents: CombatEvent[];
+  buildingEvents: BuildingEvent[];
   objectives: ObjectiveProgressState;
 };
 

@@ -65,6 +65,13 @@ export const assetKeys = {
       hurt: "tiny-rpg-archer-hurt",
       death: "tiny-rpg-archer-death",
     },
+    scout: {
+      idle: "tiny-rpg-scout-idle",
+      walk: "tiny-rpg-scout-walk",
+      attack: "tiny-rpg-scout-attack",
+      hurt: "tiny-rpg-scout-hurt",
+      death: "tiny-rpg-scout-death",
+    },
     arrow: "tiny-rpg-arrow",
   },
   elements: {
@@ -204,6 +211,7 @@ export const assetKeys = {
     townCenter: "aob-building-town-center",
     house: "aob-building-house",
     barracks: "aob-building-barracks",
+    stable: "aob-building-stable",
     lumberCamp: "aob-building-lumber-camp",
     mill: "aob-building-mill",
     stoneCamp: "aob-building-stone-camp",
@@ -262,11 +270,21 @@ export const assetKeys = {
       settlement: "aob-building-static-barracks-t2",
       network: "aob-building-static-barracks-t3",
     },
+    stable: {
+      genesis: "aob-building-static-stable-t1",
+      settlement: "aob-building-static-stable-t2",
+      network: "aob-building-static-stable-t3",
+    },
     watchTower: {
       genesis: "aob-building-static-watch-tower-t1",
       settlement: "aob-building-static-watch-tower-t2",
       network: "aob-building-static-watch-tower-t3",
     },
+  },
+  aobBuildingRuins: {
+    small: "aob-building-ruins-small",
+    medium: "aob-building-ruins-medium",
+    large: "aob-building-ruins-large",
   },
   aobWalls: {
     palisadeHorizontal: "aob-wall-palisade-horizontal",

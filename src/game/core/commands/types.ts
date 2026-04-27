@@ -65,6 +65,12 @@ export type AssignBuildersCommand = CommandBase & {
   builderIds: EntityId[];
 };
 
+export type RepairBuildingCommand = CommandBase & {
+  type: "repairBuilding";
+  buildingId: EntityId;
+  builderIds: EntityId[];
+};
+
 export type TrainUnitCommand = CommandBase & {
   type: "trainUnit";
   buildingId: EntityId;
@@ -105,6 +111,16 @@ export type ReseedFarmCommand = CommandBase & {
   farmId: EntityId;
 };
 
+export type CancelConstructionCommand = CommandBase & {
+  type: "cancelConstruction";
+  buildingId: EntityId;
+};
+
+export type DestroyBuildingCommand = CommandBase & {
+  type: "destroyBuilding";
+  buildingId: EntityId;
+};
+
 export type CancelPlacementCommand = CommandBase & {
   type: "cancelPlacement";
 };
@@ -116,6 +132,7 @@ export type GameCommand =
   | BuildWallLineCommand
   | BuildWallPathCommand
   | AssignBuildersCommand
+  | RepairBuildingCommand
   | TrainUnitCommand
   | SetRallyPointCommand
   | GatherResourceCommand
@@ -123,6 +140,8 @@ export type GameCommand =
   | QueueResearchCommand
   | AdvanceAgeCommand
   | ReseedFarmCommand
+  | CancelConstructionCommand
+  | DestroyBuildingCommand
   | CancelPlacementCommand;
 
 type DistributiveOmit<T, K extends keyof any> = T extends unknown ? Omit<T, K> : never;

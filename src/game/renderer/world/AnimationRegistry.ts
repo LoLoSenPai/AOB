@@ -132,6 +132,41 @@ export function registerAnimations(scene: Phaser.Scene): void {
     frameRate: 8,
     repeat: 0,
   });
+  create(scene, {
+    key: "tinyScout-idle",
+    textureKey: assetKeys.tinyRpg.scout.idle,
+    frames: 6,
+    frameRate: 6,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyScout-walk",
+    textureKey: assetKeys.tinyRpg.scout.walk,
+    frames: 8,
+    frameRate: 11,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyScout-attack",
+    textureKey: assetKeys.tinyRpg.scout.attack,
+    frames: 7,
+    frameRate: 13,
+    repeat: -1,
+  });
+  create(scene, {
+    key: "tinyScout-hurt",
+    textureKey: assetKeys.tinyRpg.scout.hurt,
+    frames: 4,
+    frameRate: 10,
+    repeat: 0,
+  });
+  create(scene, {
+    key: "tinyScout-death",
+    textureKey: assetKeys.tinyRpg.scout.death,
+    frames: 4,
+    frameRate: 8,
+    repeat: 0,
+  });
 }
 
 function create(scene: Phaser.Scene, config: SheetAnimation): void {

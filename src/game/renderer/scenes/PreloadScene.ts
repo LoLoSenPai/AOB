@@ -89,6 +89,7 @@ export class PreloadScene extends Phaser.Scene {
     const fullPackRoot = "/Tiny RPG Character Asset Pack v1.03 -Full 20 Characters";
     const knightRoot = encodeURI(`${fullPackRoot}/Characters(100x100)/Knight Templar/Knight Templar`);
     const archerRoot = encodeURI(`${fullPackRoot}/Characters(100x100)/Archer/Archer`);
+    const lancerRoot = encodeURI(`${fullPackRoot}/Characters(100x100)/Lancer/Lancer`);
     this.load.spritesheet(assetKeys.tinyRpg.soldier.idle, `${knightRoot}/Knight%20Templar-Idle.png`, {
       frameWidth: 100,
       frameHeight: 100,
@@ -126,6 +127,26 @@ export class PreloadScene extends Phaser.Scene {
       frameHeight: 100,
     });
     this.load.spritesheet(assetKeys.tinyRpg.archer.death, `${archerRoot}/Archer-Death.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.scout.idle, `${lancerRoot}/Lancer-Idle.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.scout.walk, `${lancerRoot}/Lancer-Walk01.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.scout.attack, `${lancerRoot}/Lancer-Attack01.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.scout.hurt, `${lancerRoot}/Lancer-Hurt.png`, {
+      frameWidth: 100,
+      frameHeight: 100,
+    });
+    this.load.spritesheet(assetKeys.tinyRpg.scout.death, `${lancerRoot}/Lancer-Death.png`, {
       frameWidth: 100,
       frameHeight: 100,
     });
@@ -258,6 +279,7 @@ export class PreloadScene extends Phaser.Scene {
 
   private loadAobBuildingStaticAssets(): void {
     const root = "/assets/aob-buildings/static-runtime";
+    const ruinsRoot = "/assets/aob-buildings/ruins";
     this.load.image(assetKeys.aobBuildingStatic.construction, `${root}/construction.png`);
     this.load.image(assetKeys.aobBuildingStatic.townCenter.genesis, "/last-assets/hdv-t1.png");
     this.load.image(assetKeys.aobBuildingStatic.townCenter.settlement, "/last-assets/hdv-t2.png");
@@ -283,9 +305,15 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobBuildingStatic.barracks.genesis, `${root}/barracks-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.barracks.settlement, `${root}/barracks-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.barracks.network, `${root}/barracks-t3.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.genesis, `${root}/barracks-t1.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.settlement, `${root}/barracks-t2.png`);
+    this.load.image(assetKeys.aobBuildingStatic.stable.network, `${root}/barracks-t3.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.genesis, `${root}/watch-tower-t1.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.settlement, `${root}/watch-tower-t2.png`);
     this.load.image(assetKeys.aobBuildingStatic.watchTower.network, `${root}/watch-tower-t3.png`);
+    this.load.image(assetKeys.aobBuildingRuins.small, `${ruinsRoot}/ruins-small.png`);
+    this.load.image(assetKeys.aobBuildingRuins.medium, `${ruinsRoot}/ruins-medium.png`);
+    this.load.image(assetKeys.aobBuildingRuins.large, `${ruinsRoot}/ruins-large.png`);
   }
 
   private loadAobWallAssets(): void {

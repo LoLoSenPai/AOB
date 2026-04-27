@@ -7,6 +7,7 @@ export type WorkerTaskCounts = {
   idle: number;
   gathering: number;
   building: number;
+  repairing: number;
   carrying: number;
   byResource: Record<ResourceType, number>;
 };
@@ -17,6 +18,7 @@ export function workerTaskCountsForPlayer(state: GameState, playerId: PlayerId =
     idle: 0,
     gathering: 0,
     building: 0,
+    repairing: 0,
     carrying: 0,
     byResource: {
       food: 0,
@@ -40,6 +42,10 @@ export function workerTaskCountsForPlayer(state: GameState, playerId: PlayerId =
     }
     if (task.kind === "build") {
       counts.building += 1;
+      continue;
+    }
+    if (task.kind === "repair") {
+      counts.repairing += 1;
       continue;
     }
     counts.gathering += 1;
