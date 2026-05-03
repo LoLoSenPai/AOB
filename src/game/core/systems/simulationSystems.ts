@@ -170,6 +170,16 @@ function runGatheringSystem(state: GameState): void {
     if (task.phase === "toStorage") {
       const storage = task.storageId ? state.entities[task.storageId] : undefined;
       if (!storage?.storage) {
+        const carried = worker.worker.carrying;
+        const replacement = carried ? findNearestStorage(state, worker.position, carried.type, worker.ownerId) : undefined;
+        if (replacement) {
+          task.storageId = replacement.id;
+          const dropoff = storageDropoffTarget(state, worker.position, replacement);
+          worker.mobile.target = dropoff;
+          worker.mobile.path = findPath(state, worker.position, dropoff);
+          worker.visualState = "carrying";
+          continue;
+        }
         delete worker.worker.task;
         continue;
       }
@@ -204,8 +214,21 @@ function runGatheringSystem(state: GameState): void {
 }
 
 function storageDropoffTarget(state: GameState, from: { x: number; y: number }, storage: GameEntity): { x: number; y: number } {
-  const adjacent = findFreeAdjacentTiles(state, storage, from)[0];
-  return adjacent ? tileCenter(adjacent) : storage.position;
+  const currentTile = worldToTile(from);
+  const adjacent = findFreeAdjacentTiles(state, storage, from);
+  for (const tile of adjacent) {
+    if (sameTile(tile, currentTile)) {
+      return tileCenter(tile);
+    }
+    if (findPath(state, from, tileCenter(tile)).length > 0) {
+      return tileCenter(tile);
+    }
+  }
+  return adjacent[0] ? tileCenter(adjacent[0]) : storage.position;
+}
+
+function sameTile(a: TileCoord, b: TileCoord): boolean {
+  return a.x === b.x && a.y === b.y;
 }
 
 function isWorkerAtStorageDropoff(worker: GameEntity, storage: GameEntity): boolean {
@@ -511,7 +534,7 @@ function runProductionSystem(state: GameState): void {
       continue;
     }
     const unit = createUnit(state, item.unitType, PLAYER_ID, tileCenter(spawnTile));
-    assignProducedUnitToRally(state, building, unit);
+    assignProducedUnitExitOrder(state, building, unit, spawnTile);
     state.entities[unit.id] = unit;
     building.producer.queue.shift();
     addMessage(state, `${unitConfigs[item.unitType].label} trained.`);
@@ -548,16 +571,41 @@ function findProducerSpawnTile(state: GameState, building: GameEntity): TileCoor
   return undefined;
 }
 
-function assignProducedUnitToRally(state: GameState, building: GameEntity, unit: GameEntity): void {
-  const rallyPoint = building.producer?.rallyPoint;
-  if (!rallyPoint || !unit.mobile) {
+function assignProducedUnitExitOrder(state: GameState, building: GameEntity, unit: GameEntity, spawnTile: TileCoord): void {
+  if (!unit.mobile) {
     return;
   }
-  unit.mobile.target = { ...rallyPoint };
-  unit.mobile.path = findPath(state, unit.position, rallyPoint);
+  const target = building.producer?.rallyPoint ?? producerDefaultExitPoint(state, building, spawnTile);
+  if (!target) {
+    return;
+  }
+  unit.mobile.target = { ...target };
+  unit.mobile.path = findPath(state, unit.position, target);
   if (unit.mobile.path.length > 0) {
     unit.visualState = "walking";
   }
+}
+
+function producerDefaultExitPoint(state: GameState, building: GameEntity, spawnTile: TileCoord): { x: number; y: number } | undefined {
+  const origin = building.tile;
+  const footprint = building.building?.footprint;
+  if (!origin || !footprint) {
+    return undefined;
+  }
+
+  const frontY = origin.y + footprint.h;
+  const candidates: TileCoord[] = [
+    { x: spawnTile.x, y: frontY + 2 },
+    { x: spawnTile.x, y: frontY + 1 },
+    { x: Math.floor(origin.x + footprint.w / 2), y: frontY + 2 },
+    { x: Math.floor(origin.x + footprint.w / 2), y: frontY + 1 },
+  ];
+  for (const tile of candidates) {
+    if (isTileWalkableForUnit(state, tile) && findPath(state, tileCenter(spawnTile), tileCenter(tile)).length > 0) {
+      return tileCenter(tile);
+    }
+  }
+  return undefined;
 }
 
 function runCombatSystem(state: GameState): void {

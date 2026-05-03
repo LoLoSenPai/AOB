@@ -53,6 +53,9 @@ export function applyCommand(state: GameState, command: GameCommand): void {
     case "trainUnit":
       applyTrainUnit(state, command.playerId, command.buildingId, command.unitType);
       break;
+    case "cancelProductionItem":
+      applyCancelProductionItem(state, command.playerId, command.buildingId, command.queueItemId);
+      break;
     case "setRallyPoint":
       applySetRallyPoint(state, command.playerId, command.buildingId, command.target);
       break;
@@ -395,12 +398,45 @@ function applyTrainUnit(state: GameState, playerId: PlayerId, buildingId: Entity
 
   player.resources = applyCost(player.resources, unitConfig.cost, -1);
   building.producer.queue.push({
-    id: `q_${state.tick}_${building.producer.queue.length}`,
+    id: createProductionQueueItemId(state, building),
     unitType,
     remainingTicks: unitConfig.trainTicks,
     totalTicks: unitConfig.trainTicks,
   });
   addMessage(state, `${unitConfig.label} queued.`);
+}
+
+function applyCancelProductionItem(state: GameState, playerId: PlayerId, buildingId: EntityId, queueItemId: string): void {
+  const player = state.players[playerId];
+  const building = state.entities[buildingId];
+  if (!player || !building?.producer || building.ownerId !== playerId) {
+    return;
+  }
+
+  const itemIndex = building.producer.queue.findIndex((item) => item.id === queueItemId);
+  if (itemIndex < 0) {
+    return;
+  }
+
+  const [item] = building.producer.queue.splice(itemIndex, 1);
+  if (!item) {
+    return;
+  }
+
+  const config = unitConfigs[item.unitType];
+  player.resources = applyCost(player.resources, config.cost, 1);
+  addMessage(state, `${config.label} cancelled.`);
+}
+
+function createProductionQueueItemId(state: GameState, building: GameEntity): string {
+  const existingIds = new Set(building.producer?.queue.map((item) => item.id) ?? []);
+  let serial = building.producer?.queue.length ?? 0;
+  let id = `q_${state.tick}_${building.id}_${serial}`;
+  while (existingIds.has(id)) {
+    serial += 1;
+    id = `q_${state.tick}_${building.id}_${serial}`;
+  }
+  return id;
 }
 
 function applySetRallyPoint(state: GameState, playerId: PlayerId, buildingId: EntityId, target: Vec2): void {

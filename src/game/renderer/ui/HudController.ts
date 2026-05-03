@@ -15,6 +15,7 @@ type HudCallbacks = {
   onToggleWallOrientation: () => void;
   onConfirmPlacement: () => void;
   onTrainRequest: (unitType: UnitType) => void;
+  onCancelProductionItem: (buildingId: string, queueItemId: string) => void;
   onAdvanceAgeRequest: () => void;
   onReseedFarmRequest: (farmId: string) => void;
   onCancelConstruction: (buildingId: string) => void;
@@ -25,6 +26,13 @@ type HudCallbacks = {
 
 export type HudRenderContext = {
   placementType?: BuildingType;
+  placementInfo?: {
+    canPlace: boolean;
+    cost: Partial<Record<ResourceType, number>>;
+    footprintLabel: string;
+    targetLabel: string;
+    statusLabel: string;
+  };
   wallLineStarted: boolean;
   wallSegmentCount: number;
   wallPlacementCanConfirm: boolean;
@@ -267,6 +275,15 @@ export class HudController {
         }
       });
     });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-cancel-production]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const buildingId = button.dataset.producer;
+        const queueItemId = button.dataset.cancelProduction;
+        if (buildingId && queueItemId) {
+          this.callbacks.onCancelProductionItem(buildingId, queueItemId);
+        }
+      });
+    });
     this.root.querySelectorAll<HTMLButtonElement>("[data-advance]").forEach((button) => {
       button.addEventListener("click", () => this.callbacks.onAdvanceAgeRequest());
     });
@@ -450,14 +467,14 @@ function productionQueueMarkup(entity: GameEntity): string {
       <div class="queue-list">
         ${entity.producer.queue
           .map((item, index) => {
-            const progress = Math.round((1 - item.remainingTicks / Math.max(1, item.totalTicks)) * 100);
+            const progress = displayProgressPercent(item.remainingTicks, item.totalTicks);
             return `
-              <div class="queue-item ${index === 0 ? "queue-item--active" : ""}">
+              <button class="queue-item queue-item--button ${index === 0 ? "queue-item--active" : ""}" data-producer="${entity.id}" data-cancel-production="${item.id}" title="Cancel ${unitConfigs[item.unitType].label}">
                 ${unitPortraitMarkup(item.unitType, "queue-unit-icon")}
                 <span>${unitConfigs[item.unitType].label}</span>
-                <strong>${index === 0 ? `${progress}%` : "Queued"}</strong>
+                <strong>${index === 0 ? `${progress}%` : "Queued"} / Cancel</strong>
                 ${index === 0 ? `<span class="queue-progress"><span style="width:${progress}%"></span></span>` : ""}
-              </div>
+              </button>
             `;
           })
           .join("")}
@@ -484,6 +501,14 @@ function ageProgressMarkup(entity: GameEntity, state: GameState): string {
   `;
 }
 
+function displayProgressPercent(remainingTicks: number, totalTicks: number): number {
+  const raw = Math.round((1 - remainingTicks / Math.max(1, totalTicks)) * 100);
+  if (raw <= 0 || raw >= 100) {
+    return Math.max(0, Math.min(100, raw));
+  }
+  return Math.floor(raw / 10) * 10;
+}
+
 function commandDockMarkup(state: GameState, primary: GameEntity | undefined, context: HudRenderContext): string {
   if (context.placementType) {
     if (context.placementType === "wall") {
@@ -494,6 +519,7 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
         <div class="command-dock">
           <div class="command-section">
           <div class="command-label">${labelText}</div>
+          ${placementInfoMarkup(context.placementInfo)}
           <div class="hud-inline-note">Hold left click, drag the line, release to build.</div>
             <button class="command-button command-wide" data-toggle-wall-orientation="true"><span class="command-title">Direction: ${wallOrientationLabel(context.wallOrientationMode)}</span></button>
             <button class="command-button command-wide" data-clear-wall-draft="true" ${context.wallLineStarted ? "" : "disabled"}><span class="command-title">Clear Preview</span></button>
@@ -507,6 +533,8 @@ function commandDockMarkup(state: GameState, primary: GameEntity | undefined, co
       <div class="command-dock">
         <div class="command-section">
           <div class="command-label">${labelText}</div>
+          ${placementInfoMarkup(context.placementInfo)}
+          <div class="hud-inline-note">Hold Shift while placing to keep building more.</div>
           <button class="command-button command-wide" data-cancel-placement="true"><span class="command-hotkey">Esc</span><span class="command-title">Cancel</span></button>
         </div>
       </div>
@@ -609,6 +637,22 @@ function wallOrientationLabel(mode: HudRenderContext["wallOrientationMode"]): st
     case "auto":
       return "Auto";
   }
+}
+
+function placementInfoMarkup(info: HudRenderContext["placementInfo"]): string {
+  if (!info) {
+    return "";
+  }
+  return `
+    <div class="placement-summary ${info.canPlace ? "placement-summary--valid" : "placement-summary--invalid"}">
+      <div class="placement-status">${info.statusLabel}</div>
+      <div class="placement-summary-grid">
+        <span><strong>Cost</strong>${costLabel(info.cost)}</span>
+        <span><strong>Footprint</strong>${info.footprintLabel}</span>
+        <span><strong>Target</strong>${info.targetLabel}</span>
+      </div>
+    </div>
+  `;
 }
 
 function buildMenuMarkup(state: GameState, category: BuildCategoryId | undefined): string {

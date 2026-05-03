@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { PLAYER_ID, TILE_SIZE, type AgeId } from "../../data/constants";
+import { PLAYER_ID, RESOURCE_TYPES, TILE_SIZE, type AgeId } from "../../data/constants";
 import { assetKeys, type HumanAction } from "../../data/assets";
-import { buildingConfigs, wallTierForAge } from "../../data/definitions";
+import { buildingConfigs, canAfford, costForBuilding, type Cost, wallTierForAge } from "../../data/definitions";
 import { BTC_VILLAGE_DISCOVERY_TILE, initialMapLayout, type VisualOverlay } from "../../data/mapLayout";
 import {
   grassDetailFrames,
@@ -178,6 +178,9 @@ export class WorldScene extends Phaser.Scene {
   private previousSelectedIds = new Set<EntityId>();
   private hoveredEntityId?: EntityId;
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
+  private readonly controlGroups = new Map<number, EntityId[]>();
+  private lastControlGroupPress?: { index: number; time: number };
+  private lastPrimaryClick?: { entityId?: EntityId; screen: Vec2; time: number };
   private isPanning = false;
   private panLastScreen?: Vec2;
   private currentCursor = "";
@@ -830,6 +833,15 @@ export class WorldScene extends Phaser.Scene {
           });
         }
       },
+      onCancelProductionItem: (buildingId, queueItemId) => {
+        this.simulation.dispatch({
+          type: "cancelProductionItem",
+          playerId: PLAYER_ID,
+          buildingId,
+          queueItemId,
+        });
+        this.playUiClick(360, 0.016);
+      },
       onAdvanceAgeRequest: () => {
         const townCenter = this.getSelectedBuilding("townCenter") ?? Object.values(this.simulation.state.entities).find((entity) => entity.ownerId === PLAYER_ID && entity.building?.type === "townCenter");
         if (townCenter) {
@@ -875,6 +887,7 @@ export class WorldScene extends Phaser.Scene {
     const wallDraftSegments = this.wallDraftPreviewSegments();
     return {
       placementType: this.placementType,
+      placementInfo: this.createPlacementInfo(wallDraftSegments),
       wallLineStarted: Boolean(this.wallDraft),
       wallSegmentCount: wallDraftSegments.length,
       wallPlacementCanConfirm: Boolean(this.wallDraft) && wallDraftSegments.length > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallDraftSegments),
@@ -887,6 +900,43 @@ export class WorldScene extends Phaser.Scene {
         width: camera.width / camera.zoom,
         height: camera.height / camera.zoom,
       },
+    };
+  }
+
+  private createPlacementInfo(wallDraftSegments: WallLineSegment[]): HudRenderContext["placementInfo"] {
+    if (!this.placementType) {
+      return undefined;
+    }
+
+    const player = this.simulation.state.players[PLAYER_ID];
+    const age = player.age;
+    if (this.placementType === "wall") {
+      const hasWallDrag = Boolean(this.wallDraft || this.wallDragStartTile);
+      const segmentCount = hasWallDrag ? wallDraftSegments.length : 0;
+      const cost = scaleCost(costForBuilding("wall", age), Math.max(1, segmentCount));
+      const buildable = hasWallDrag && segmentCount > 0 && canPlaceWallSegmentsAt(this.simulation.state, wallDraftSegments);
+      const affordable = canAfford(player.resources, cost);
+      return {
+        canPlace: buildable && affordable,
+        cost,
+        footprintLabel: segmentCount > 0 ? `${segmentCount} segment${segmentCount === 1 ? "" : "s"}` : "Line",
+        targetLabel: this.wallDragStartTile ? `From ${this.wallDragStartTile.x}, ${this.wallDragStartTile.y}` : "Choose start",
+        statusLabel: segmentCount === 0 ? "Drag to preview" : placementStatusLabel(buildable, affordable),
+      };
+    }
+
+    const pointer = this.input.activePointer;
+    const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
+    const config = buildingConfigs[this.placementType];
+    const cost = costForBuilding(this.placementType, age);
+    const buildable = canPlaceBuildingAt(this.simulation.state, this.placementType, tile);
+    const affordable = canAfford(player.resources, cost);
+    return {
+      canPlace: buildable && affordable,
+      cost,
+      footprintLabel: `${config.footprint.w} x ${config.footprint.h} tiles`,
+      targetLabel: `Tile ${tile.x}, ${tile.y}`,
+      statusLabel: placementStatusLabel(buildable, affordable),
     };
   }
 
@@ -913,6 +963,7 @@ export class WorldScene extends Phaser.Scene {
           populationCap: player.populationCap,
           ageProgress: player.ageProgress,
         },
+        selectedIds: state.selection.selectedIds,
         selected,
         selectedDetail: primary
           ? {
@@ -924,8 +975,33 @@ export class WorldScene extends Phaser.Scene {
                 totalTicks: item.totalTicks,
               })),
               rallyPoint: primary.producer?.rallyPoint,
-            }
+          }
           : undefined,
+        camera: {
+          scrollX: this.cameras.main.scrollX,
+          scrollY: this.cameras.main.scrollY,
+          zoom: this.cameras.main.zoom,
+          width: this.cameras.main.width,
+          height: this.cameras.main.height,
+          viewX: this.cameras.main.worldView.x,
+          viewY: this.cameras.main.worldView.y,
+          viewWidth: this.cameras.main.worldView.width,
+          viewHeight: this.cameras.main.worldView.height,
+        },
+        controlGroups: Object.fromEntries(
+          Array.from(this.controlGroups.entries()).map(([index, ids]) => [
+            index,
+            ids.filter((id) => Boolean(state.entities[id])).length,
+          ]),
+        ),
+        playerUnits: entities
+          .filter((entity) => entity.ownerId === PLAYER_ID && entity.unit)
+          .map((entity) => ({
+            id: entity.id,
+            type: entity.unit?.type,
+            x: entity.position.x,
+            y: entity.position.y,
+          })),
         counts: {
           units: entities.filter((entity) => entity.kind === "unit").length,
           buildings: entities.filter((entity) => entity.kind === "building").length,
@@ -1067,6 +1143,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
+    if (this.handleControlGroupHotkey(event)) {
+      return;
+    }
+
     const key = commandKeyFromEvent(event);
     if (this.buildMenuOpen && this.selectedWorkerIds().length > 0) {
       if (!this.buildMenuCategory) {
@@ -1153,6 +1233,53 @@ export class WorldScene extends Phaser.Scene {
     this.playUiClick(460, 0.014);
   }
 
+  private handleControlGroupHotkey(event: KeyboardEvent): boolean {
+    const groupIndex = controlGroupIndexFromEvent(event);
+    if (!groupIndex) {
+      return false;
+    }
+
+    event.preventDefault();
+    if (event.ctrlKey || event.metaKey) {
+      this.storeControlGroup(groupIndex);
+      return true;
+    }
+
+    this.selectControlGroup(groupIndex, event.shiftKey);
+    return true;
+  }
+
+  private storeControlGroup(index: number): void {
+    const ids = this.simulation.state.selection.selectedIds.filter((id) => {
+      const entity = this.simulation.state.entities[id];
+      return Boolean(entity?.ownerId === PLAYER_ID && (entity.kind === "unit" || entity.kind === "building"));
+    });
+    if (ids.length === 0) {
+      this.playUiClick(220, 0.014);
+      return;
+    }
+
+    this.controlGroups.set(index, uniqueIds(ids));
+    this.lastControlGroupPress = undefined;
+    this.playUiClick(720, 0.016);
+  }
+
+  private selectControlGroup(index: number, addToSelection: boolean): void {
+    const ids = (this.controlGroups.get(index) ?? []).filter((id) => {
+      const entity = this.simulation.state.entities[id];
+      return Boolean(entity?.ownerId === PLAYER_ID);
+    });
+    if (ids.length === 0) {
+      this.playUiClick(220, 0.014);
+      return;
+    }
+
+    const now = this.time.now;
+    const centerCamera = this.lastControlGroupPress?.index === index && now - this.lastControlGroupPress.time < 480;
+    this.lastControlGroupPress = { index, time: now };
+    this.selectIds(ids, { add: addToSelection, center: centerCamera });
+  }
+
   private selectTownCenter(): void {
     const townCenter = Object.values(this.simulation.state.entities).find(
       (entity) => entity.ownerId === PLAYER_ID && entity.building?.type === "townCenter",
@@ -1192,17 +1319,38 @@ export class WorldScene extends Phaser.Scene {
     if (!entity) {
       return;
     }
+    this.selectIds([id], { center: centerCamera });
+  }
+
+  private selectIds(ids: EntityId[], options: { add?: boolean; center?: boolean } = {}): void {
     this.cancelPlacement();
     this.buildMenuOpen = false;
     this.buildMenuCategory = undefined;
+    const selectedIds = options.add ? uniqueIds([...this.simulation.state.selection.selectedIds, ...ids]) : uniqueIds(ids);
     this.simulation.dispatch({
       type: "selectUnits",
       playerId: PLAYER_ID,
-      entityIds: [id],
+      entityIds: selectedIds,
     });
-    if (centerCamera) {
-      this.cameras.main.centerOn(entity.position.x, entity.position.y);
+    if (options.center) {
+      this.centerCameraOnEntities(selectedIds);
     }
+  }
+
+  private centerCameraOnEntities(ids: EntityId[]): void {
+    const entities = ids.map((id) => this.simulation.state.entities[id]).filter((entity): entity is GameEntity => Boolean(entity));
+    if (entities.length === 0) {
+      return;
+    }
+
+    const center = entities.reduce(
+      (total, entity) => ({
+        x: total.x + entity.position.x / entities.length,
+        y: total.y + entity.position.y / entities.length,
+      }),
+      { x: 0, y: 0 },
+    );
+    this.cameras.main.centerOn(center.x, center.y);
   }
 
   private playUiClick(frequency = 620, volume = 0.018): void {
@@ -1974,6 +2122,9 @@ export class WorldScene extends Phaser.Scene {
     if (!entity.health) {
       return;
     }
+    if (entity.building && !entity.building.completed) {
+      return;
+    }
     const selected = this.simulation.state.selection.selectedIds.includes(entity.id);
     const shouldDraw = entity.building ? entity.health.current < entity.health.max : entity.health.current < entity.health.max || selected;
     if (!shouldDraw) {
@@ -2014,35 +2165,67 @@ export class WorldScene extends Phaser.Scene {
     }
 
     const wasDrag = this.dragStartScreen ? Phaser.Math.Distance.Between(this.dragStartScreen.x, this.dragStartScreen.y, pointer.x, pointer.y) > 6 : false;
+    const addToSelection = pointerHasShift(pointer);
     if (wasDrag && this.dragStartWorld) {
       const ids = this.entitiesInRect(this.dragStartWorld, { x: pointer.worldX, y: pointer.worldY });
-      this.simulation.dispatch({
-        type: "selectUnits",
-        playerId: PLAYER_ID,
-        entityIds: ids,
-      });
+      this.selectIds(ids, { add: addToSelection });
     } else {
       const target = this.getEntityAt({ x: pointer.worldX, y: pointer.worldY });
       if (target && (target.ownerId === PLAYER_ID || target.kind === "resource")) {
-        this.simulation.dispatch({
-          type: "selectUnits",
-          playerId: PLAYER_ID,
-          entityIds: [target.id],
-        });
+        const isDoubleClick = this.isDoubleClickOnTarget(pointer, target);
+        const ids = isDoubleClick ? this.sameTypeVisibleUnitIds(target) : [target.id];
+        this.selectIds(ids, { add: addToSelection });
       } else if (target?.ownerId && target.ownerId !== PLAYER_ID) {
         this.commandSelectedToTarget(target, { x: pointer.worldX, y: pointer.worldY });
       } else {
-        this.simulation.dispatch({
-          type: "selectUnits",
-          playerId: PLAYER_ID,
-          entityIds: [],
-        });
+        this.selectIds([], { add: addToSelection });
       }
+      this.rememberPrimaryClick(pointer, target?.id);
     }
 
     this.dragStartWorld = undefined;
     this.dragStartScreen = undefined;
     this.dragGraphics?.clear();
+  }
+
+  private isDoubleClickOnTarget(pointer: Phaser.Input.Pointer, target: GameEntity): boolean {
+    if (target.ownerId !== PLAYER_ID || !target.unit) {
+      return false;
+    }
+    const mouseEvent = pointer.event;
+    if (mouseEvent instanceof MouseEvent && mouseEvent.detail >= 2) {
+      return true;
+    }
+    const last = this.lastPrimaryClick;
+    if (!last || last.entityId !== target.id) {
+      return false;
+    }
+    const elapsed = this.time.now - last.time;
+    const distance = Phaser.Math.Distance.Between(last.screen.x, last.screen.y, pointer.x, pointer.y);
+    return elapsed <= 420 && distance <= 8;
+  }
+
+  private rememberPrimaryClick(pointer: Phaser.Input.Pointer, entityId?: EntityId): void {
+    this.lastPrimaryClick = {
+      entityId,
+      screen: { x: pointer.x, y: pointer.y },
+      time: this.time.now,
+    };
+  }
+
+  private sameTypeVisibleUnitIds(target: GameEntity): EntityId[] {
+    const type = target.unit?.type;
+    if (!type) {
+      return [target.id];
+    }
+
+    const view = this.cameras.main.worldView;
+    const ids = Object.values(this.simulation.state.entities)
+      .filter((entity) => entity.ownerId === PLAYER_ID && entity.unit?.type === type)
+      .filter((entity) => view.contains(entity.position.x, entity.position.y))
+      .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+      .map((entity) => entity.id);
+    return ids.length > 0 ? ids : [target.id];
   }
 
   private handleCommandClick(pointer: Phaser.Input.Pointer): void {
@@ -2141,29 +2324,48 @@ export class WorldScene extends Phaser.Scene {
     if (!this.placementType) {
       return;
     }
+    const buildingType = this.placementType;
     const tile = worldToTile({ x: pointer.worldX, y: pointer.worldY });
-    if (this.placementType === "wall") {
+    if (buildingType === "wall") {
       this.finishWallDrag(pointer);
       return;
     }
-    if (!canPlaceBuildingAt(this.simulation.state, this.placementType, tile)) {
+    if (!canPlaceBuildingAt(this.simulation.state, buildingType, tile)) {
+      this.playUiClick(210, 0.018);
+      return;
+    }
+    if (!canAfford(this.simulation.state.players[PLAYER_ID].resources, costForBuilding(buildingType, this.simulation.state.players[PLAYER_ID].age))) {
+      this.simulation.dispatch({
+        type: "buildStructure",
+        playerId: PLAYER_ID,
+        buildingType,
+        tile,
+        builderIds: this.selectedWorkerIds(),
+      });
+      this.playUiClick(210, 0.018);
       return;
     }
     this.simulation.dispatch({
       type: "buildStructure",
       playerId: PLAYER_ID,
-      buildingType: this.placementType,
+      buildingType,
       tile,
       builderIds: this.selectedWorkerIds(),
     });
     this.showCommandIndicator(
       {
-        x: (tile.x + buildingConfigs[this.placementType].footprint.w / 2) * TILE_SIZE,
-        y: (tile.y + buildingConfigs[this.placementType].footprint.h / 2) * TILE_SIZE,
+        x: (tile.x + buildingConfigs[buildingType].footprint.w / 2) * TILE_SIZE,
+        y: (tile.y + buildingConfigs[buildingType].footprint.h / 2) * TILE_SIZE,
       },
       "build",
     );
-    this.cancelPlacement();
+    if (!pointerHasShift(pointer)) {
+      this.cancelPlacement();
+    } else {
+      this.buildMenuOpen = false;
+      this.buildMenuCategory = undefined;
+      this.playUiClick(540, 0.012);
+    }
     this.dragStartWorld = undefined;
     this.dragStartScreen = undefined;
   }
@@ -2982,6 +3184,27 @@ function sameTile(a: TileCoord, b: TileCoord): boolean {
   return a.x === b.x && a.y === b.y;
 }
 
+function placementStatusLabel(buildable: boolean, affordable: boolean): string {
+  if (!buildable) {
+    return "Blocked tile";
+  }
+  if (!affordable) {
+    return "Need resources";
+  }
+  return "Placement valid";
+}
+
+function scaleCost(cost: Cost, multiplier: number): Cost {
+  const scaled: Cost = {};
+  for (const resource of RESOURCE_TYPES) {
+    const amount = cost[resource] ?? 0;
+    if (amount > 0) {
+      scaled[resource] = amount * multiplier;
+    }
+  }
+  return scaled;
+}
+
 function wallSegmentsForDraftPoints(points: TileCoord[]): WallLineSegment[] {
   const segments: WallLineSegment[] = [];
   for (let index = 0; index < points.length - 1; index += 1) {
@@ -3113,6 +3336,23 @@ function mouseButton(pointer: Phaser.Input.Pointer): number {
     return event.button;
   }
   return pointer.leftButtonDown() ? 0 : pointer.rightButtonDown() ? 2 : 0;
+}
+
+function pointerHasShift(pointer: Phaser.Input.Pointer): boolean {
+  const event = pointer.event;
+  return event instanceof MouseEvent ? event.shiftKey : false;
+}
+
+function controlGroupIndexFromEvent(event: KeyboardEvent): number | undefined {
+  const codeMatch = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
+  if (codeMatch?.[1]) {
+    return Number(codeMatch[1]);
+  }
+  return /^[1-9]$/.test(event.key) ? Number(event.key) : undefined;
+}
+
+function uniqueIds(ids: EntityId[]): EntityId[] {
+  return Array.from(new Set(ids));
 }
 
 function commandKeyFromEvent(event: KeyboardEvent): string {

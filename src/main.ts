@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import "./styles.css";
 import { BootScene } from "./game/renderer/scenes/BootScene";
+import { MapEditorScene } from "./game/renderer/scenes/MapEditorScene";
 import { PreloadScene } from "./game/renderer/scenes/PreloadScene";
 import { WorldScene } from "./game/renderer/scenes/WorldScene";
 
@@ -20,7 +21,7 @@ const game = new Phaser.Game({
       preventDefaultWheel: false,
     },
   },
-  scene: [BootScene, PreloadScene, WorldScene],
+  scene: [BootScene, PreloadScene, WorldScene, MapEditorScene],
 });
 
 window.addEventListener("contextmenu", (event) => event.preventDefault());

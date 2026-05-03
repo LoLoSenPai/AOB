@@ -10,13 +10,24 @@ export class PreloadScene extends Phaser.Scene {
     this.loadHumanSheets();
     this.loadSunnysideWorldAssets();
     this.loadTinyRpgAssets();
+    this.loadEditorTilesets();
     this.loadAobMapAssets();
+    this.loadTerrainV2Assets();
+    this.loadTerrainV3Assets();
     this.loadAobBuildingStaticAssets();
     this.loadAobWallAssets();
   }
 
   create(): void {
-    this.scene.start("WorldScene");
+    const params = new URLSearchParams(window.location.search);
+    this.scene.start(params.get("editor") === "1" ? "MapEditorScene" : "WorldScene");
+  }
+
+  private loadEditorTilesets(): void {
+    this.load.spritesheet(assetKeys.editor.earthTilesetV2, "/assets/editor/earth/TileSet_V2.png", {
+      frameWidth: 32,
+      frameHeight: 32,
+    });
   }
 
   private loadHumanSheets(): void {
@@ -301,6 +312,79 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image(assetKeys.aobMap.btcWallHorizontal, `${btcRoot}/walls/btc-wall-horizontal.png`);
     this.load.image(assetKeys.aobMap.btcGateHorizontal, `${btcRoot}/walls/btc-gate-horizontal.png`);
     this.load.image(assetKeys.aobMap.btcGateOpenHorizontal, `${btcRoot}/walls/btc-gate-open-horizontal.png`);
+  }
+
+  private loadTerrainV2Assets(): void {
+    const root = "/assets/aob-map/terrain-v2";
+    const base = assetKeys.aobMap.terrainV2.base;
+    this.load.image(base.grassBright, `${root}/base/grass-bright.png`);
+    this.load.image(base.grassDark, `${root}/base/grass-dark.png`);
+    this.load.image(base.dirtVillage, `${root}/base/dirt-village.png`);
+    this.load.image(base.dirtRoad, `${root}/base/dirt-road.png`);
+    this.load.image(base.stoneGround, `${root}/base/stone-ground.png`);
+    this.load.image(base.crystalGround, `${root}/base/crystal-ground.png`);
+    this.load.image(base.waterShallow, `${root}/base/water-shallow.png`);
+    this.load.image(base.waterDeep, `${root}/base/water-deep.png`);
+    this.load.image(base.shoreWetSand, `${root}/base/shore-wet-sand.png`);
+    this.load.image(base.btcCopperGround, `${root}/base/btc-copper-ground.png`);
+
+    const transitions = assetKeys.aobMap.terrainV2.transitions;
+    this.load.image(transitions.grassDirtEdge, `${root}/transitions/grass-dirt-edge.png`);
+    this.load.image(transitions.grassDirtCornerOuter, `${root}/transitions/grass-dirt-corner-outer.png`);
+    this.load.image(transitions.grassDirtCornerInner, `${root}/transitions/grass-dirt-corner-inner.png`);
+    this.load.image(transitions.grassStoneEdge, `${root}/transitions/grass-stone-edge.png`);
+    this.load.image(transitions.grassStoneCornerOuter, `${root}/transitions/grass-stone-corner-outer.png`);
+    this.load.image(transitions.grassStoneCornerInner, `${root}/transitions/grass-stone-corner-inner.png`);
+    this.load.image(transitions.grassCrystalEdge, `${root}/transitions/grass-crystal-edge.png`);
+    this.load.image(transitions.grassCrystalCornerOuter, `${root}/transitions/grass-crystal-corner-outer.png`);
+    this.load.image(transitions.grassCrystalCornerInner, `${root}/transitions/grass-crystal-corner-inner.png`);
+    this.load.image(transitions.grassWaterEdge, `${root}/transitions/grass-water-edge.png`);
+    this.load.image(transitions.grassWaterCornerOuter, `${root}/transitions/grass-water-corner-outer.png`);
+    this.load.image(transitions.grassWaterCornerInner, `${root}/transitions/grass-water-corner-inner.png`);
+    this.load.image(transitions.shoreWaterEdge, `${root}/transitions/shore-water-edge.png`);
+    this.load.image(transitions.shoreWaterCornerOuter, `${root}/transitions/shore-water-corner-outer.png`);
+    this.load.image(transitions.shallowDeepEdge, `${root}/transitions/shallow-deep-edge.png`);
+    this.load.image(transitions.shallowDeepCornerOuter, `${root}/transitions/shallow-deep-corner-outer.png`);
+    this.load.image(transitions.shallowDeepCornerInner, `${root}/transitions/shallow-deep-corner-inner.png`);
+
+    const decals = assetKeys.aobMap.terrainV2.decals;
+    this.load.image(decals.dirtScuffSmall, `${root}/decals/dirt-scuff-small.png`);
+    this.load.image(decals.dirtScuffMedium, `${root}/decals/dirt-scuff-medium.png`);
+    this.load.image(decals.flowerPatchSmall, `${root}/decals/flower-patch-small.png`);
+    this.load.image(decals.stoneScatterSmall, `${root}/decals/stone-scatter-small.png`);
+    this.load.image(decals.crystalShardsSmall, `${root}/decals/crystal-shards-small.png`);
+    this.load.image(decals.dryBushSmall, `${root}/decals/dry-bush-small.png`);
+    this.load.image(decals.berryBushCluster, `${root}/decals/berry-bush-cluster.png`);
+    this.load.image(decals.leavesTwigsSmall, `${root}/decals/leaves-twigs-small.png`);
+    this.load.image(decals.quarryCracksSmall, `${root}/decals/quarry-cracks-small.png`);
+    this.load.image(decals.shoreMudSmall, `${root}/decals/shore-mud-small.png`);
+  }
+
+  private loadTerrainV3Assets(): void {
+    const root = "/assets/aob-map/terrain-v3";
+    const grassDirt = assetKeys.aobMap.terrainV3.grassDirt;
+    this.load.image(grassDirt.grass, `${root}/grass-dirt/grass.png`);
+    this.load.image(grassDirt.dirt, `${root}/grass-dirt/dirt.png`);
+    this.load.image(grassDirt.edgeVertical, `${root}/grass-dirt/edge-vertical.png`);
+    this.load.image(grassDirt.edgeHorizontal, `${root}/grass-dirt/edge-horizontal.png`);
+    this.load.image(grassDirt.cornerOuter, `${root}/grass-dirt/corner-outer.png`);
+    this.load.image(grassDirt.cornerInner, `${root}/grass-dirt/corner-inner.png`);
+
+    const grassStone = assetKeys.aobMap.terrainV3.grassStone;
+    this.load.image(grassStone.grass, `${root}/grass-stone/grass.png`);
+    this.load.image(grassStone.stone, `${root}/grass-stone/stone.png`);
+    this.load.image(grassStone.edgeVertical, `${root}/grass-stone/edge-vertical.png`);
+    this.load.image(grassStone.edgeHorizontal, `${root}/grass-stone/edge-horizontal.png`);
+    this.load.image(grassStone.cornerOuter, `${root}/grass-stone/corner-outer.png`);
+    this.load.image(grassStone.cornerInner, `${root}/grass-stone/corner-inner.png`);
+
+    const shoreWater = assetKeys.aobMap.terrainV3.shoreWater;
+    this.load.image(shoreWater.shore, `${root}/shore-water/shore.png`);
+    this.load.image(shoreWater.shallowWater, `${root}/shore-water/shallow-water.png`);
+    this.load.image(shoreWater.edgeVertical, `${root}/shore-water/edge-vertical.png`);
+    this.load.image(shoreWater.edgeHorizontal, `${root}/shore-water/edge-horizontal.png`);
+    this.load.image(shoreWater.cornerOuter, `${root}/shore-water/corner-outer.png`);
+    this.load.image(shoreWater.cornerInner, `${root}/shore-water/corner-inner.png`);
   }
 
   private loadAobBuildingStaticAssets(): void {

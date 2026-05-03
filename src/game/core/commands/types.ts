@@ -77,6 +77,12 @@ export type TrainUnitCommand = CommandBase & {
   unitType: UnitType;
 };
 
+export type CancelProductionItemCommand = CommandBase & {
+  type: "cancelProductionItem";
+  buildingId: EntityId;
+  queueItemId: string;
+};
+
 export type SetRallyPointCommand = CommandBase & {
   type: "setRallyPoint";
   buildingId: EntityId;
@@ -134,6 +140,7 @@ export type GameCommand =
   | AssignBuildersCommand
   | RepairBuildingCommand
   | TrainUnitCommand
+  | CancelProductionItemCommand
   | SetRallyPointCommand
   | GatherResourceCommand
   | AttackTargetCommand
