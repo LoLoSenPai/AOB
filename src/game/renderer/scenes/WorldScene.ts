@@ -106,6 +106,7 @@ const TINY_COMBAT_SPRITE_SCALE = 1.45;
 const GROUND_PAD_DEPTH = -875;
 const FOG_DEPTH = 8_400;
 const FOG_CHUNK_TILES = 2;
+const USE_RPG_FOREST_RUNTIME_MAP = false;
 const USE_SUNNYSIDE_TERRAIN = false;
 const USE_SUNNYSIDE_BUILDINGS = false;
 const USE_BUILDING_GROUND_PADS = false;
@@ -221,6 +222,7 @@ export class WorldScene extends Phaser.Scene {
   private configureTerrainTextureFilters(): void {
     for (const key of [
       assetKeys.aobMap.baseGrass,
+      assetKeys.aobMap.rpgForestRuntimeMap,
       assetKeys.aobMap.baseDirt,
       assetKeys.aobMap.baseRocky,
       assetKeys.aobMap.baseShallowWater,
@@ -365,6 +367,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createTerrain(): void {
+    if (USE_RPG_FOREST_RUNTIME_MAP) {
+      this.createRpgForestRuntimeTerrain();
+      return;
+    }
+
     if (USE_SUNNYSIDE_TERRAIN) {
       this.createSunnysideTerrain();
       return;
@@ -403,6 +410,18 @@ export class WorldScene extends Phaser.Scene {
 
     this.createTerrainTransitions(state, chunkSize);
     this.createVisualOverlays();
+  }
+
+  private createRpgForestRuntimeTerrain(): void {
+    const state = this.simulation.state;
+    const worldWidth = state.map.width * TILE_SIZE;
+    const worldHeight = state.map.height * TILE_SIZE;
+    this.add
+      .image(worldWidth / 2, worldHeight / 2, assetKeys.aobMap.rpgForestRuntimeMap)
+      .setOrigin(0.5, 0.5)
+      .setDisplaySize(worldWidth, worldHeight)
+      .setDepth(TERRAIN_BASE_DEPTH);
+    this.createVisualOverlays({ rpgForestRuntimeMap: true });
   }
 
   private createSunnysideTerrain(): void {
@@ -525,9 +544,12 @@ export class WorldScene extends Phaser.Scene {
       .setDepth(TERRAIN_TRANSITION_DEPTH + 1);
   }
 
-  private createVisualOverlays(): void {
+  private createVisualOverlays(options: { rpgForestRuntimeMap?: boolean } = {}): void {
     this.registerSolanaAtlasFrames();
     for (const overlay of initialMapLayout.visualOverlays) {
+      if (options.rpgForestRuntimeMap && !shouldKeepOverlayOnRpgForestRuntimeMap(overlay)) {
+        continue;
+      }
       this.addVisualOverlay(overlay);
     }
   }
@@ -662,6 +684,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private createMapDecor(): void {
+    if (USE_RPG_FOREST_RUNTIME_MAP) {
+      return;
+    }
+
     const state = this.simulation.state;
     const blocked = buildDecorBlockedTiles(state);
 
@@ -1010,6 +1036,7 @@ export class WorldScene extends Phaser.Scene {
           completedWalls: entities.filter((entity) => entity.building?.type === "wall" && entity.building.completed).length,
         },
         visuals: {
+          terrainMode: USE_RPG_FOREST_RUNTIME_MAP ? "rpgForestRuntime" : USE_SUNNYSIDE_TERRAIN ? "sunnyside" : "aobDecals",
           ruins: this.ruinViews.size,
           exploredRatio: exploredTileRatio(state),
           btcVillageDiscovered: isTileExplored(state, BTC_VILLAGE_DISCOVERY_TILE),
@@ -2797,6 +2824,10 @@ const sunnysideBuildingFrames: Record<string, AtlasFrameDef> = {
   "sunnyside-building-market-chests": { x: 576, y: 474, width: 64, height: 27, originX: 0.5, originY: 0.98 },
   "sunnyside-building-red-rug": { x: 644, y: 563, width: 41, height: 42, originX: 0.5, originY: 0.82 },
 };
+
+function shouldKeepOverlayOnRpgForestRuntimeMap(overlay: VisualOverlay): boolean {
+  return overlay.kind !== "grassDetail" && overlay.kind !== "villageProp";
+}
 
 function sunnysideTerrainKindForTile(map: MapState, tile: TileType, x: number, y: number): SunnysideTerrainKind {
   if (tile === "water" || tile === "deepWater") {

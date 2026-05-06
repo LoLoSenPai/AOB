@@ -28,6 +28,30 @@ export class PreloadScene extends Phaser.Scene {
       frameWidth: 32,
       frameHeight: 32,
     });
+    this.load.spritesheet(assetKeys.editor.gptTileset2A, "/assets/editor/gpt-set-2/set-2-a-clean.png", {
+      frameWidth: 32,
+      frameHeight: 32,
+    });
+    this.load.spritesheet(assetKeys.editor.gptTileset2B, "/assets/editor/gpt-set-2/set-2-b-clean.png", {
+      frameWidth: 32,
+      frameHeight: 32,
+    });
+    this.load.spritesheet(assetKeys.editor.rpgForestTileset, "/assets/editor/rpg-forest/tilesets/forest-tileset.png", {
+      frameWidth: 24,
+      frameHeight: 24,
+    });
+    this.load.spritesheet(assetKeys.editor.rpgForestTrees, "/assets/editor/rpg-forest/tilesets/forest-trees.png", {
+      frameWidth: 24,
+      frameHeight: 24,
+    });
+    this.load.spritesheet(assetKeys.editor.rpgForestWater, "/assets/editor/rpg-forest/tilesets/forest-water.png", {
+      frameWidth: 24,
+      frameHeight: 24,
+    });
+    this.load.spritesheet(assetKeys.editor.rpgForestCollision, "/assets/editor/rpg-forest/tilesets/collision-tile.png", {
+      frameWidth: 24,
+      frameHeight: 24,
+    });
   }
 
   private loadHumanSheets(): void {
@@ -168,6 +192,7 @@ export class PreloadScene extends Phaser.Scene {
     const root = "/assets/aob-map/runtime";
     const legacyRoot = "/assets/aob-map/optimized";
     const terrainRoot = "/assets/aob-map/terrain";
+    this.load.image(assetKeys.aobMap.rpgForestRuntimeMap, "/assets/editor/rpg-forest/runtime/rpg-forest-runtime-map.png");
     this.load.image(assetKeys.aobMap.baseGrass, "/last-assets/grass-256x256.png");
     this.load.image(assetKeys.aobMap.baseDirt, `${terrainRoot}/base-dirt.png`);
     this.load.image(assetKeys.aobMap.baseRocky, `${terrainRoot}/base-rocky.png`);

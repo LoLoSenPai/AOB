@@ -1293,7 +1293,7 @@ canvas {
   position: absolute;
   top: 64px;
   bottom: 52px;
-  width: 294px;
+  width: 500px;
   padding: 10px;
   overflow: auto;
 }
@@ -1482,18 +1482,71 @@ canvas {
   gap: 8px;
 }
 
+.map-editor-tileset-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.map-editor-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.map-editor-template-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+.map-editor-template-list {
+  display: grid;
+  gap: 6px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.map-editor-template-row {
+  display: grid;
+  grid-template-columns: minmax(94px, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-editor-template-row strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffe3a4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-editor-tileset-tabs button {
+  min-width: 0;
+  padding-inline: 5px;
+  white-space: normal;
+  line-height: 1.05;
+}
+
 .map-editor-tileset-picker {
   position: relative;
-  width: min(100%, 256px);
-  aspect-ratio: 2 / 5;
-  overflow: hidden;
+  width: min(100%, var(--tileset-native-width));
+  max-height: 340px;
+  overflow: auto;
   border: 1px solid rgba(198, 153, 74, 0.72);
   background: #111;
   cursor: crosshair;
   box-shadow: inset 0 0 0 1px rgba(255, 238, 176, 0.1);
 }
 
-.map-editor-tileset-picker::after {
+.map-editor-tileset-canvas {
+  position: relative;
+  width: var(--tileset-native-width);
+  height: var(--tileset-native-height);
+}
+
+.map-editor-tileset-canvas::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -1507,8 +1560,8 @@ canvas {
 }
 
 .map-editor-tileset-picker img {
-  width: 100%;
-  height: 100%;
+  width: var(--tileset-native-width);
+  height: var(--tileset-native-height);
   display: block;
   image-rendering: pixelated;
 }
@@ -1524,6 +1577,11 @@ canvas {
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.72),
     0 0 0 1px rgba(0, 0, 0, 0.72);
+}
+
+.map-editor-current-preview--stamp {
+  color: #ffe3a4;
+  font-weight: 800;
 }
 
 .map-editor-tileset-meta {
@@ -1658,8 +1716,9 @@ canvas {
   }
 
   .map-editor-panel {
-    width: 238px;
+    width: min(380px, calc(100vw - 24px));
     top: 88px;
+    bottom: 52px;
   }
 
   .map-editor-object-grid,

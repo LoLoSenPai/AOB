@@ -88,9 +88,16 @@ export const assetKeys = {
   },
   editor: {
     earthTilesetV2: "editor-earth-tileset-v2",
+    gptTileset2A: "editor-gpt-tileset-2-a",
+    gptTileset2B: "editor-gpt-tileset-2-b",
+    rpgForestTileset: "editor-rpg-forest-tileset",
+    rpgForestTrees: "editor-rpg-forest-trees",
+    rpgForestWater: "editor-rpg-forest-water",
+    rpgForestCollision: "editor-rpg-forest-collision",
   },
   aobMap: {
     terrain: "aob-map-terrain",
+    rpgForestRuntimeMap: "aob-map-rpg-forest-runtime-map",
     baseGrass: "aob-map-base-grass",
     baseDirt: "aob-map-base-dirt",
     baseRocky: "aob-map-base-rocky",
